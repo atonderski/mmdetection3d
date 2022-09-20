@@ -1,32 +1,17 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-import os
-from collections import OrderedDict
 from os import path as osp
-from typing import List, Tuple, Union
+from typing import List, Union
 
 import mmcv
 import numpy as np
-from nuscenes.nuscenes import NuScenes
-from nuscenes.utils.geometry_utils import view_points
-from pyquaternion import Quaternion
-from shapely.geometry import MultiPoint, box
 
-from mmdet3d.core.bbox import points_cam2img
-from mmdet3d.datasets import NuScenesDataset
-from mmdet3d.datasets.zen_dataset import ZenDataset
-from mmdet3d.zod_tmp import (CameraCalibration, EgoPose, FrameInformation,
-                             LidarCalibration, OXTSData, SensorFrame,
-                             ZenseactOpenDataset)
-
-nus_categories = (
-    "car",
-    "bicycle",
-    "motorcycle",
-    "pedestrian",
-)
+from mmdet3d.datasets import ZenFramesDataset
+from mmdet3d.zod_tmp import (CAMERA_FRONT, LIDAR_VELODYNE, CameraCalibration,
+                             EgoPose, LidarCalibration, OXTSData, SensorFrame,
+                             ZodFrames)
 
 
-def create_nuscenes_infos(
+def create_zenframes_infos(
     root_path, info_prefix, version="mini", max_sweeps=10, use_blur=True
 ):
     """Create info file of nuscene dataset.
@@ -45,9 +30,9 @@ def create_nuscenes_infos(
     """
     if version != "mini":
         raise NotImplemented
-    train_scenes = ["00000" + str(i) for i in range(9)]
-    val_scenes = ["000009"]
-    zod = ZenseactOpenDataset(root_path)
+    zod = ZodFrames(root_path, version)
+    train_scenes = zod.get_split("train")
+    val_scenes = zod.get_split("train")
     train_infos = _fill_infos(
         zod, train_scenes, max_sweeps=max_sweeps, use_blur=use_blur
     )
@@ -63,9 +48,7 @@ def create_nuscenes_infos(
     mmcv.dump(data, info_val_path)
 
 
-def _fill_infos(
-    zod: ZenseactOpenDataset, frames: List[str], max_sweeps=10, use_blur=True
-):
+def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10, use_blur=True):
     """Generate the train/val infos from the raw data.
 
     Args:
@@ -78,13 +61,13 @@ def _fill_infos(
     """
     infos = []
     for frame_id in mmcv.track_iter_progress(frames):
-        frame_info = zod.get_frame_info(frame_id)
+        frame_info = zod[frame_id]
 
-        lidar_path = frame_info.lidar_frame[zod.VELODYNE].filepath
+        lidar_path = frame_info.lidar_frame[LIDAR_VELODYNE].filepath
         mmcv.check_file_exist(lidar_path)
         calib = zod.read_calibration(frame_info.calibration_path)
         oxts = zod.read_oxts(frame_info.oxts_path)
-        core_lidar_calib = calib.lidars[zod.VELODYNE]
+        core_lidar_calib = calib.lidars[LIDAR_VELODYNE]
         core_ego_pose = oxts.get_ego_pose(frame_info.timestamp)
 
         info = {
@@ -99,7 +82,7 @@ def _fill_infos(
         }
 
         cameras = [
-            zod.CAMERA_FRONT,
+            CAMERA_FRONT,
         ]
         # suffix = "_blur" if use_blur else "_dnat"
         suffix = ""
@@ -121,11 +104,11 @@ def _fill_infos(
             obtain_sensor2lidar(
                 frame, core_lidar_calib, core_ego_pose, core_lidar_calib, oxts, "lidar"
             )
-            for frame in frame_info.previous_lidar_frames[zod.VELODYNE][:max_sweeps]
+            for frame in frame_info.previous_lidar_frames[LIDAR_VELODYNE][:max_sweeps]
         ]
 
         # obtain annotation
-        annos = zod.get_dynamic_objects(frame_id)
+        annos = zod.read_dynamic_objects(frame_id)
         locs = np.array([b.pos for b in annos]).reshape(-1, 3)
         dims = np.array([b.lwh for b in annos]).reshape(-1, 3)
         rots = np.array([b.rot.yaw_pitch_roll[0] for b in annos]).reshape(-1, 1)
@@ -137,11 +120,15 @@ def _fill_infos(
         #     ],
         #     dtype=bool,
         # ).reshape(-1)
+        # TEMPORARY: valid always true
+        valid_flag = np.ones(gt_boxes.shape[0], dtype=bool)
 
         names = [b.name for b in annos]
         for i in range(len(names)):
-            if names[i] in ZenDataset.NameMapping:
-                names[i] = ZenDataset.NameMapping[names[i]]
+            if names[i] in ZenFramesDataset.NameMapping:
+                names[i] = ZenFramesDataset.NameMapping[names[i]]
+            else:
+                print(names[i])
         names = np.array(names)
 
         assert len(gt_boxes) == len(annos), f"{len(gt_boxes)}, {len(annos)}"
@@ -149,7 +136,7 @@ def _fill_infos(
         info["gt_names"] = names
         info["gt_boxes_2d"] = np.array([b.box2d for b in annos]).reshape(-1, 4)
         # info["num_lidar_pts"] = np.array([a["num_lidar_pts"] for a in annotations])
-        # info["valid_flag"] = valid_flag
+        info["valid_flag"] = valid_flag
 
         infos.append(info)
 

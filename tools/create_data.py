@@ -6,6 +6,7 @@ from tools.data_converter import indoor_converter as indoor
 from tools.data_converter import kitti_converter as kitti
 from tools.data_converter import lyft_converter as lyft_converter
 from tools.data_converter import nuscenes_converter as nuscenes_converter
+from tools.data_converter import zenframes_converter
 from tools.data_converter.create_gt_database import (
     GTDatabaseCreater, create_groundtruth_database)
 
@@ -195,7 +196,37 @@ def waymo_data_prep(root_path,
         f'{out_dir}/{info_prefix}_infos_train.pkl',
         relative_path=False,
         with_mask=False,
-        num_worker=workers).create()
+        num_worker=workers,
+    ).create()
+
+
+def zenframes_data_prep(root_path, info_prefix, version, out_dir, max_sweeps=10):
+    """Prepare data related to Zenseact Open Dataset.
+
+    Related data consists of '.pkl' files recording basic infos,
+    2D annotations and groundtruth database.
+
+    Args:
+        root_path (str): Path of dataset root.
+        info_prefix (str): The prefix of info filenames.
+        version (str): Dataset version.
+        out_dir (str): Output directory of the groundtruth database info.
+        max_sweeps (int, optional): Number of input consecutive frames.
+            Default: 10
+    """
+    zenframes_converter.create_zenframes_infos(
+        root_path, info_prefix, version=version, max_sweeps=max_sweeps
+    )
+    # info_train_path = osp.join(root_path, f"{info_prefix}_infos_train.pkl")
+    # info_val_path = osp.join(root_path, f"{info_prefix}_infos_val.pkl")
+    # zenframes_converter.export_2d_annotation(root_path, info_train_path, version=version)
+    # zenframes_converter.export_2d_annotation(root_path, info_val_path, version=version)
+    create_groundtruth_database(
+        "ZenFramesDataset",
+        root_path,
+        info_prefix,
+        f"{out_dir}/{info_prefix}_infos_train.pkl",
+    )
 
 
 parser = argparse.ArgumentParser(description='Data converter arg parser')
@@ -310,4 +341,13 @@ if __name__ == '__main__':
             info_prefix=args.extra_tag,
             num_points=args.num_points,
             out_dir=args.out_dir,
-            workers=args.workers)
+            workers=args.workers,
+        )
+    elif args.dataset == "zenframes":
+        zenframes_data_prep(
+            root_path=args.root_path,
+            info_prefix=args.extra_tag,
+            version=args.version,
+            out_dir=args.out_dir,
+            max_sweeps=args.max_sweeps,
+        )
