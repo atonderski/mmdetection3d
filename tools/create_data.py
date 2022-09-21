@@ -200,7 +200,7 @@ def waymo_data_prep(root_path,
     ).create()
 
 
-def zen_data_prep(root_path, info_prefix, version, out_dir, max_sweeps=10):
+def zen_data_prep(root_path, info_prefix, version, out_dir, workers, max_sweeps=10):
     """Prepare data related to Zenseact Open Dataset.
 
     Related data consists of '.pkl' files recording basic infos,
@@ -221,12 +221,19 @@ def zen_data_prep(root_path, info_prefix, version, out_dir, max_sweeps=10):
     info_val_path = osp.join(root_path, f"{info_prefix}_infos_val.pkl")
     zen_converter.export_2d_annotation(root_path, info_train_path, version=version)
     zen_converter.export_2d_annotation(root_path, info_val_path, version=version)
-    create_groundtruth_database(
+    GTDatabaseCreater(
         "ZenDataset",
         root_path,
         info_prefix,
         f"{out_dir}/{info_prefix}_infos_train.pkl",
+        num_worker=workers
     )
+    # create_groundtruth_database(
+    #     "ZenDataset",
+    #     root_path,
+    #     info_prefix,
+    #     f"{out_dir}/{info_prefix}_infos_train.pkl",
+    # )
 
 
 parser = argparse.ArgumentParser(description='Data converter arg parser')
@@ -349,5 +356,6 @@ if __name__ == '__main__':
             info_prefix=args.extra_tag,
             version=args.version,
             out_dir=args.out_dir,
+            workers=args.workers,
             max_sweeps=args.max_sweeps,
         )

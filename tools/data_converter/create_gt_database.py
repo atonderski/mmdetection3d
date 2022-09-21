@@ -603,6 +603,30 @@ class GTDatabaseCreater:
                         file_client_args=file_client_args)
                 ])
 
+        elif self.dataset_class_name == "ZenDataset":
+            dataset_cfg.update(
+                use_valid_flag=True,
+                pipeline=[
+                    dict(
+                        type="ZenLoadPointsFromFile",
+                        coord_type="LIDAR",
+                        load_dim=5,
+                        use_dim=5,
+                    ),
+                    dict(
+                        type="ZenLoadPointsFromMultiSweeps",
+                        sweeps_num=0,
+                        use_dim=[0, 1, 2, 3, 4],
+                        pad_empty_sweeps=True,
+                        remove_close=True,
+                    ),
+                    dict(
+                        type="LoadAnnotations3D",
+                        with_bbox_3d=True,
+                        with_label_3d=True,
+                    ),
+                ],
+            )
         dataset = build_dataset(dataset_cfg)
         self.pipeline = dataset.pipeline
         if self.database_save_path is None:
