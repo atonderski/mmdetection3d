@@ -14,7 +14,7 @@ from .pipelines import Compose
 
 
 @DATASETS.register_module()
-class ZenFramesDataset(Custom3DDataset):
+class ZenDataset(Custom3DDataset):
     r"""Zenseact (Open) Dataset.
 
     This class serves as the API for experiments on the NuScenes Dataset.
@@ -86,7 +86,7 @@ class ZenFramesDataset(Custom3DDataset):
         filter_empty_gt=True,
         test_mode=False,
         eval_version="detection_cvpr_2019",
-        use_valid_flag=False,
+        use_valid_flag=True,
     ):
         self.load_interval = load_interval
         self.use_valid_flag = use_valid_flag
@@ -176,7 +176,7 @@ class ZenFramesDataset(Custom3DDataset):
         info = self.data_infos[index]
         # standard protocol modified from SECOND.Pytorch
         input_dict = dict(
-            sample_idx=info["token"],
+            sample_idx=info['frame_id'],
             pts_filename=info["lidar_path"],
             sweeps=info["sweeps"],
             timestamp=info["timestamp"] / 1e6,
@@ -231,7 +231,7 @@ class ZenFramesDataset(Custom3DDataset):
         if self.use_valid_flag:
             mask = info["valid_flag"]
         else:
-            mask = info["num_lidar_pts"] > 0
+            mask = np.ones_like(info["gt_names"], dtype=np.bool_)
         gt_bboxes_3d = info["gt_boxes"][mask]
         gt_names_3d = info["gt_names"][mask]
         gt_labels_3d = []

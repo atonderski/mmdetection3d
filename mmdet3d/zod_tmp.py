@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Union
 
+import h5py
 import numpy as np
 from dataclass_wizard import JSONSerializable
 from pyquaternion import Quaternion
@@ -45,14 +46,60 @@ class EgoPose:
 
 @dataclass
 class OXTSData:
-    data: np.ndarray  # TODO:
+    acceleration_x: np.ndarray
+    acceleration_y: np.ndarray
+    acceleration_z: np.ndarray
+    angular_rate_x: np.ndarray
+    angular_rate_y: np.ndarray
+    angular_rate_z: np.ndarray
+    ecef_x: np.ndarray
+    ecef_y: np.ndarray
+    ecef_z: np.ndarray
+    heading: np.ndarray
+    leap_seconds: np.ndarray
+    pitch: np.ndarray
+    pos_alt: np.ndarray
+    pos_lat: np.ndarray
+    pos_lon: np.ndarray
+    roll: np.ndarray
+    std_dev_pos_east: np.ndarray
+    std_dev_pos_north: np.ndarray
+    time_gps: np.ndarray
+    traveled: np.ndarray
+    vel_down: np.ndarray
+    vel_forward: np.ndarray
+    vel_lateral: np.ndarray
 
     def get_ego_pose(self, timestamp: datetime) -> EgoPose:
-        return EgoPose(np.random.rand(4, 4))
+        return EgoPose(np.eye(4, 4))
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "OXTSData":
-        return cls(**data)
+    def from_hdf5(cls, file: h5py.Group) -> "OXTSData":
+        return cls(
+            acceleration_x=np.array(file["accelerationX"]),
+            acceleration_y=np.array(file["accelerationY"]),
+            acceleration_z=np.array(file["accelerationZ"]),
+            angular_rate_x=np.array(file["angularRateX"]),
+            angular_rate_y=np.array(file["angularRateY"]),
+            angular_rate_z=np.array(file["angularRateZ"]),
+            ecef_x=np.array(file["ecef_x"]),
+            ecef_y=np.array(file["ecef_y"]),
+            ecef_z=np.array(file["ecef_z"]),
+            heading=np.array(file["heading"]),
+            leap_seconds=np.array(file["leapSeconds"]),
+            pitch=np.array(file["pitch"]),
+            pos_alt=np.array(file["posAlt"]),
+            pos_lat=np.array(file["posLat"]),
+            pos_lon=np.array(file["posLon"]),
+            roll=np.array(file["roll"]),
+            std_dev_pos_east=np.array(file["stdDevPosEast"]),
+            std_dev_pos_north=np.array(file["stdDevPosNorth"]),
+            time_gps=np.array(file["time_gps"]),
+            traveled=np.array(file["traveled"]),
+            vel_down=np.array(file["velDown"]),
+            vel_forward=np.array(file["velForward"]),
+            vel_lateral=np.array(file["velLateral"]),
+        )
 
 
 @dataclass
@@ -154,6 +201,43 @@ class FrameInformation(JSONSerializable):
 
     metadata_path: str
 
+    def convert_paths_to_absolute(self, root_path: str):
+        self.traffic_sign_annotation_path = (
+            os.path.join(root_path, self.traffic_sign_annotation_path)
+            if self.traffic_sign_annotation_path
+            else None
+        )
+        self.ego_road_annotation_path = (
+            os.path.join(root_path, self.ego_road_annotation_path)
+            if self.ego_road_annotation_path
+            else None
+        )
+        self.dynamic_objects_annotation_path = os.path.join(
+            root_path, self.dynamic_objects_annotation_path
+        )
+        self.static_objects_annotation_path = os.path.join(
+            root_path, self.static_objects_annotation_path
+        )
+        self.lane_markings_annotation_path = os.path.join(
+            root_path, self.lane_markings_annotation_path
+        )
+        self.road_condition_annotation_path = os.path.join(
+            root_path, self.road_condition_annotation_path
+        )
+        self.oxts_path = os.path.join(root_path, self.oxts_path)
+        self.calibration_path = os.path.join(root_path, self.calibration_path)
+        self.metadata_path = os.path.join(root_path, self.metadata_path)
+        for sensor_frame in self.lidar_frame.values():
+            sensor_frame.filepath = os.path.join(root_path, sensor_frame.filepath)
+        for lidar_frames in self.previous_lidar_frames.values():
+            for sensor_frame in lidar_frames:
+                sensor_frame.filepath = os.path.join(root_path, sensor_frame.filepath)
+        for lidar_frames in self.future_lidar_frames.values():
+            for sensor_frame in lidar_frames:
+                sensor_frame.filepath = os.path.join(root_path, sensor_frame.filepath)
+        for sensor_frame in self.camera_frame.values():
+            sensor_frame.filepath = os.path.join(root_path, sensor_frame.filepath)
+
 
 @dataclass
 class DynamicObject:
@@ -196,6 +280,8 @@ class DynamicObject:
         }
 
         """
+        if data["properties"]["unclear"] or "location_3d" not in data["properties"]:
+            return None
         box2d = np.array(data["geometry"]["coordinates"])
         box2d = np.array(
             [box2d[:, 0].min(), box2d[:, 1].min(), box2d[:, 0].max(), box2d[:, 1].max()]
@@ -223,11 +309,11 @@ class ZodFrames(object):
 
     SPLITS = {
         "mini": {
-            "train": [str(id_).zfill(9) for id_ in range(9)],
+            "train": [str(id_).zfill(6) for id_ in range(9)],
             "val": [str(id_).zfill(6) for id_ in [9]],
         },
         "full": {
-            "train": [str(id_).zfill(9) for id_ in range(90000)],
+            "train": [str(id_).zfill(6) for id_ in range(90000)],
             "val": [str(id_).zfill(6) for id_ in range(90000, 100000)],
         },
     }
@@ -258,11 +344,12 @@ class ZodFrames(object):
         )
         for frame_id in tqdm(all_ids, desc="Loading frame information"):
             frame_path = os.path.join(
-                self._dataset_root, SINGLE_FRAMES, frame_id, "frames.json"
+                self._dataset_root, SINGLE_FRAMES, frame_id, "frame_info.json"
             )
             with open(frame_path, "r") as frames_file:
                 frame = json.load(frames_file)
                 frames[frame_id] = FrameInformation.from_dict(frame)
+                frames[frame_id].convert_paths_to_absolute(self._dataset_root)
         return frames
 
     def get_split(self, split: str) -> List[str]:
@@ -270,18 +357,19 @@ class ZodFrames(object):
         assert split in self.SPLITS[self._version], f"Unknown split: {split}"
         return self.SPLITS[self._version][split]
 
-    def read_calibration(self, calib_path: str) -> Calibration:
-        with open(os.path.join(self._dataset_root, calib_path)) as f:
+    def read_calibration(self, frame_id: str) -> Calibration:
+        with open(self._frames[frame_id].calibration_path) as f:
             calib = json.load(f)
         return Calibration.from_dict(calib)
 
-    def read_oxts(self, oxts_path: str) -> OXTSData:
-        with open(os.path.join(self._dataset_root, oxts_path)) as f:
-            oxts = json.load(f)
-        return OXTSData.from_dict(oxts)
+    def read_oxts(self, frame_id: str) -> OXTSData:
+        """Read OXTS files from hd5 format."""
+        with h5py.File(self._frames[frame_id].oxts_path, "r") as f:
+            data = OXTSData.from_hdf5(f)
+        return data
 
-    def read_dynamic_objects(self, annotation_path: str) -> List[DynamicObject]:
-        path = os.path.join(self._dataset_root, annotation_path)
-        with open(path) as f:
+    def read_dynamic_objects(self, frame_id: str) -> List[DynamicObject]:
+        with open(self._frames[frame_id].dynamic_objects_annotation_path) as f:
             dynamic_objects = json.load(f)
-        return [DynamicObject.from_dict(obj) for obj in dynamic_objects]
+        objs = (DynamicObject.from_dict(anno) for anno in dynamic_objects)
+        return [obj for obj in objs if obj is not None]

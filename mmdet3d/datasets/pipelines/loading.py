@@ -691,3 +691,40 @@ class LoadAnnotations3D(LoadAnnotations):
         repr_str += f'{indent_str}with_bbox_depth={self.with_bbox_depth}, '
         repr_str += f'{indent_str}poly2mask={self.poly2mask})'
         return repr_str
+
+
+def _zen_load_points(pts_filename, load_dim):
+    """Private function to load point clouds data.
+
+    Args:
+        pts_filename (str): Filename of point clouds data.
+
+    Returns:
+        np.ndarray: An array containing point clouds data.
+    """
+    # points is a structured array with dtypes:
+    # [('timestamp', '<i4'), ('x', '<f4'), ('y', '<f4'), ('z', '<f4'), ('intensity', 'u1'), ('diode_index', 'u1')]
+    if load_dim < 3 or load_dim > 6:
+        raise NotImplementedError("Only support loading 3-6 dimensions")
+    points = np.load(pts_filename)
+    fields_to_load = [points["x"], points["y"], points["z"]]
+    if load_dim >= 4:
+        fields_to_load.append(points["intensity"].astype(np.float32))
+    if load_dim >= 5:
+        fields_to_load.append(points["diode_index"].astype(np.float32))
+    if load_dim >= 6:
+        fields_to_load.append(points["timestamp"].astype(np.float32))
+    points = np.stack(fields_to_load, axis=1)
+    return points
+
+
+@PIPELINES.register_module()
+class ZenLoadPointsFromFile(LoadPointsFromFile):
+    def _load_points(self, pts_filename):
+        return _zen_load_points(pts_filename, self.load_dim)
+
+
+@PIPELINES.register_module()
+class ZenLoadPointsFromMultiSweeps(LoadPointsFromMultiSweeps):
+    def _load_points(self, pts_filename):
+        return _zen_load_points(pts_filename, self.load_dim)
