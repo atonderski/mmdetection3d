@@ -170,9 +170,9 @@ def obtain_sensor2lidar(
         "timestamp": sensor_frame.timestamp.timestamp(),
     }
     # transforms for sweep frame
-    l2e_t_s = sensor_calib.extrinsics.translation
+    s2e_t = sensor_calib.extrinsics.translation
     e2g_t_s = ego_pose.translation
-    l2e_r_s_mat = sensor_calib.extrinsics.rotation_matrix
+    s2e_r_mat = sensor_calib.extrinsics.rotation_matrix
     e2g_r_s_mat = ego_pose.rotation_matrix
 
     # transforms for core frame
@@ -183,10 +183,10 @@ def obtain_sensor2lidar(
 
     # obtain the RT from sensor to Top LiDAR
     # sweep->ego->global->ego'->lidar
-    R = (l2e_r_s_mat.T @ e2g_r_s_mat.T) @ (
+    R = (s2e_r_mat.T @ e2g_r_s_mat.T) @ (
         np.linalg.inv(e2g_r_mat).T @ np.linalg.inv(l2e_r_mat).T
     )
-    T = (l2e_t_s @ e2g_r_s_mat.T + e2g_t_s) @ (
+    T = (s2e_t @ e2g_r_s_mat.T + e2g_t_s) @ (
         np.linalg.inv(e2g_r_mat).T @ np.linalg.inv(l2e_r_mat).T
     )
     T -= (
@@ -276,9 +276,12 @@ def get_2d_boxes(image_id, info, cam_info, mono3d=True):
     """
     records = []
 
-    lidar2cam_t = -cam_info["sensor2lidar_translation"]
-    cam2lidar_r = Quaternion(matrix=cam_info["sensor2lidar_rotation"])
-    lidar2cam_r = cam2lidar_r.inverse
+    cam2lidar = np.eye(4)
+    cam2lidar[:3, :3] = cam_info["sensor2lidar_rotation"]
+    cam2lidar[:3, 3] = cam_info["sensor2lidar_translation"]
+    lidar2cam = np.linalg.inv(cam2lidar)
+    lidar2cam_t = lidar2cam[:3, 3]
+    lidar2cam_r = Quaternion(matrix=lidar2cam[:3, :3])
 
     assert len(info["gt_boxes"]) == len(info["gt_names"]) == len(info["gt_boxes_2d"])
     for box, box2d, name in zip(info["gt_boxes"], info["gt_boxes_2d"], info["gt_names"]):
@@ -299,14 +302,13 @@ def get_2d_boxes(image_id, info, cam_info, mono3d=True):
             # box is (x, y, z, l, w, h, yaw) in lidar coordinates
             # convert to camera coordinates
             box = box.copy()
-            
+            # box[1] += 10.
             box[:3] = lidar2cam_r.rotation_matrix@box[:3] + lidar2cam_t
             rot_lidar = Quaternion(axis=(0, 0, 1), radians=box[6])
             rot_cam = lidar2cam_r * rot_lidar
 
             loc = box[:3].tolist()
-            # dim = box[3:6][[0,2,1]].tolist()
-            dim = box[3:6].tolist()
+            dim = box[3:6][[0,2,1]].tolist()  # dimensions in cam coords are (l, h, w)
             # camera coordinate system in the vehicle frame is (right, down, forward)
             # we want the rotation about the "up" axis
             rot = [-rot_cam.yaw_pitch_roll[0]]

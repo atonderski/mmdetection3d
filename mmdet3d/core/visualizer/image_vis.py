@@ -201,6 +201,9 @@ def draw_camera_bbox3d_on_img(bboxes3d,
 
     # project to 2d to get image coords (uv)
     uv_origin = points_cam2img(points_3d, cam2img, dist_coeffs=img_metas.get('dist_coeffs'), proj_model=img_metas.get('proj_model', 'pinhole'))
+    scale_factor = img_metas.get('scale_factor')
+    if scale_factor is not None:
+        uv_origin *= scale_factor[:2]
     uv_origin = (uv_origin - 1).round()
     imgfov_pts_2d = uv_origin[..., :2].reshape(num_bbox, 8, 2).numpy()
 
