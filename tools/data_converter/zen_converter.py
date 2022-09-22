@@ -305,7 +305,8 @@ def get_2d_boxes(image_id, info, cam_info, mono3d=True):
             rot_cam = lidar2cam_r * rot_lidar
 
             loc = box[:3].tolist()
-            dim = box[3:6][[0,2,1]].tolist()
+            # dim = box[3:6][[0,2,1]].tolist()
+            dim = box[3:6].tolist()
             # camera coordinate system in the vehicle frame is (right, down, forward)
             # we want the rotation about the "up" axis
             rot = [-rot_cam.yaw_pitch_roll[0]]
