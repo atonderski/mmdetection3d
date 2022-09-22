@@ -28,21 +28,29 @@ SINGLE_FRAMES = "single_frames"
 
 
 @dataclass
-class EgoPose:
-    pose: np.ndarray
+class Pose:
+    """A general class describing some pose."""
+    transform: np.ndarray
 
     @property
     def translation(self) -> np.ndarray:
-        return self.pose[:3, 3]
+        """Return the translation (array)."""
+        return self.transform[:3, 3]
 
     @property
     def rotation(self) -> Quaternion:
+        """Return the rotation as a quaternion."""
         return Quaternion(matrix=self.rotation_matrix)
 
     @property
     def rotation_matrix(self) -> np.ndarray:
-        return self.pose[:3, :3]
-
+        """Return the rotation matrix."""
+        return self.transform[:3, :3]
+    
+    @property
+    def inverse(self) -> "Pose":
+        """Return the inverse of the pose."""
+        return Pose(np.linalg.inv(self.transform))
 
 @dataclass
 class OXTSData:
@@ -70,8 +78,8 @@ class OXTSData:
     vel_forward: np.ndarray
     vel_lateral: np.ndarray
 
-    def get_ego_pose(self, timestamp: datetime) -> EgoPose:
-        return EgoPose(np.eye(4, 4))
+    def get_ego_pose(self, timestamp: datetime) -> Pose:
+        return Pose(np.eye(4, 4))
 
     @classmethod
     def from_hdf5(cls, file: h5py.Group) -> "OXTSData":
@@ -104,46 +112,17 @@ class OXTSData:
 
 @dataclass
 class LidarCalibration:
-    extrinsics: np.ndarray  # 4x4 matrix
+    extrinsics: Pose  # lidar pose in the ego frame
 
-    @property
-    def translation(self) -> np.ndarray:
-        """Return the translation vector of the extrinsics matrix."""
-        return self.extrinsics[:3, 3]
-
-    @property
-    def rotation(self) -> Quaternion:
-        """Returns the rotation as a quaternion."""
-        return Quaternion(matrix=self.rotation_matrix)
-
-    @property
-    def rotation_matrix(self) -> np.ndarray:
-        """Returns the rotation matrix."""
-        return self.extrinsics[:3, :3]
 
 
 @dataclass
 class CameraCalibration:
-    extrinsics: np.ndarray  # 4x4 matrix
+    extrinsics: Pose  # 4x4 matrix describing the camera pose in the ego frame
     intrinsics: np.ndarray  # 3x3 matrix
     distortion: np.ndarray  # 4 vector
     image_dimensions: np.ndarray  # width, height
     field_of_view: np.ndarray  # vertical, horizontal (degrees)
-
-    @property
-    def translation(self) -> np.ndarray:
-        return self.extrinsics[:3, 3]
-
-    @property
-    def rotation(self) -> Quaternion:
-        """Returns the rotation as a quaternion"""
-        return Quaternion(matrix=self.rotation_matrix)
-
-    @property
-    def rotation_matrix(self) -> np.ndarray:
-        """Returns the rotation matrix."""
-        return self.extrinsics[:3, :3]
-
 
 @dataclass
 class Calibration:
@@ -154,12 +133,12 @@ class Calibration:
     def from_dict(cls, calib_dict: Dict[str, Any]):
         lidars = {
             LIDAR_VELODYNE: LidarCalibration(
-                extrinsics=np.array(calib_dict["FC"]["lidar_extrinsics"])
+                extrinsics=Pose(np.array(calib_dict["FC"]["lidar_extrinsics"]))
             ),
         }
         cameras = {
             CAMERA_FRONT: CameraCalibration(
-                extrinsics=np.array(calib_dict["FC"]["extrinsics"]),
+                extrinsics=Pose(np.array(calib_dict["FC"]["extrinsics"])),
                 intrinsics=np.array(calib_dict["FC"]["intrinsics"]),
                 distortion=np.array(calib_dict["FC"]["distortion"]),
                 image_dimensions=np.array(calib_dict["FC"]["image_dimensions"]),

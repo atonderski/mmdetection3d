@@ -172,8 +172,8 @@ def get_box_type(box_type):
     return box_type_3d, box_mode_3d
 
 
-@array_converter(apply_to=('points_3d', 'proj_mat'))
-def points_cam2img(points_3d, proj_mat, with_depth=False):
+@array_converter(apply_to=('points_3d', 'proj_mat', 'dist_coeffs'))
+def points_cam2img(points_3d, proj_mat, with_depth=False, dist_coeffs=(), proj_model="pinhole"):
     """Project points in camera coordinates to image coordinates.
 
     Args:
@@ -205,13 +205,48 @@ def points_cam2img(points_3d, proj_mat, with_depth=False):
     # previous implementation use new_zeros, new_one yields better results
     points_4 = torch.cat([points_3d, points_3d.new_ones(points_shape)], dim=-1)
 
-    point_2d = points_4 @ proj_mat.T
-    point_2d_res = point_2d[..., :2] / point_2d[..., 2:3]
-
+    if proj_model == "pinhole":
+        point_2d = points_4 @ proj_mat.T
+        point_2d_res = point_2d[..., :2] / point_2d[..., 2:3]
+    elif proj_model == "kannala":
+        point_2d = _cam2img_kannala(points_4, proj_mat, dist_coeffs)
+        point_2d_res = point_2d[..., :2]
+    else:
+        raise NotImplementedError("Only pinhole and kannala models are supported")
+        
     if with_depth:
         point_2d_res = torch.cat([point_2d_res, point_2d[..., 2:3]], dim=-1)
 
     return point_2d_res
+
+
+def _cam2img_kannala(data, camera_matrix, dist_coeffs):
+    """Project data from 3d coordinates to image plane using the Kanala model.
+    Ref: J. Kannala and S. S. Brandt, "A generic camera model and calibration method for
+    conventional, wide-angle, and fish-eye lenses," in IEEE Transactions on Pattern Analysis and
+    Machine Intelligence, vol. 28, no. 8, pp. 1335-1340, Aug. 2006, doi: 10.1109/TPAMI.2006.153.
+    """
+    assert dist_coeffs is not None, "dist_coeffs must be provided for kannala projection model"
+    assert dist_coeffs.shape == (4,), "dist_coeffs should have 4 elements"
+    norm_data = torch.norm(data[:, :2], dim=-1)
+    radial = torch.atan2(norm_data, data[:, 2])
+    radial2 = radial ** 2
+    radial4 = radial2 ** 2
+    radial6 = radial2 * radial4
+    radial8 = radial4 ** 2
+    distortion_angle = radial * (
+        1
+        + dist_coeffs[0] * radial2
+        + dist_coeffs[1] * radial4
+        + dist_coeffs[2] * radial6
+        + dist_coeffs[3] * radial8
+    )
+    u_dist = distortion_angle * (data[:, 0] / norm_data)
+    v_dist = distortion_angle * (data[:, 1] / norm_data)
+    pos_u = camera_matrix[0, 0] * u_dist + camera_matrix[0, 2]
+    pos_v = camera_matrix[1, 1] * v_dist + camera_matrix[1, 2]
+
+    return torch.stack((pos_u, pos_v, data[:, 2]), -1)
 
 
 @array_converter(apply_to=('points', 'cam2img'))

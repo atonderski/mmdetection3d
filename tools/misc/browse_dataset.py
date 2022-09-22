@@ -192,6 +192,37 @@ def show_proj_bbox_img(input, out_dir, show=False, is_nus_mono=False):
             img, None, None, None, out_dir, filename, show=show)
 
 
+def show_bbox2d_img(input, out_dir, class_names, show=False):
+    """Visualize 2D bboxes on image."""
+    gt_bboxes = input['gt_bboxes']._data
+    gt_labels = input['gt_labels']._data
+    img_metas = input['img_metas']._data
+    img = input['img']._data.numpy()
+    # need to transpose channel to first dim
+    img = img.transpose(1, 2, 0)
+    # no 2D gt bboxes, just show img
+    if gt_bboxes.shape[0] == 0:
+        bboxes = None
+    filename = Path(img_metas['filename']).name
+
+    result_path = osp.join(out_dir, filename)
+    mmcv.mkdir_or_exist(result_path)
+
+    if gt_bboxes is not None:
+        # draw xywh boxes on image
+        img = mmcv.bgr2rgb(img)
+        img = img.copy()
+        img = mmcv.imshow_det_bboxes(
+            img,
+            gt_bboxes.numpy(),
+            gt_labels.numpy(),
+            class_names=class_names,
+            show=show,
+        )
+        img = mmcv.rgb2bgr(img)
+        mmcv.imwrite(img, osp.join(result_path, f'{filename}_2d.png'))
+
+
 def main():
     args = parse_args()
 
@@ -222,6 +253,8 @@ def main():
                 args.output_dir,
                 show=args.online,
                 is_nus_mono=(dataset_type == 'NuScenesMonoDataset'))
+        if vis_task == 'mono-det':
+            show_bbox2d_img(input, args.output_dir, class_names=cfg.class_names, show=args.online)
         elif vis_task in ['seg']:
             # show 3D segmentation mask on 3D point clouds
             show_seg_data(input, args.output_dir, show=args.online)

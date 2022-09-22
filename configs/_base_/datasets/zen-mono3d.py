@@ -3,8 +3,6 @@ data_root = 'data/zod/'
 class_names = [
     'vehicle', 'vulnerable-vehicle', 'pedestrian', 'animal'
 ]
-# Input modality for nuScenes dataset, this is consistent with the submission
-# format which requires the information in input_modality.
 input_modality = dict(
     use_lidar=False,
     use_camera=True,
@@ -19,7 +17,7 @@ train_pipeline = [
         type='LoadAnnotations3D',
         with_bbox=True,
         with_label=True,
-        with_attr_label=True,
+        with_attr_label=False,
         with_bbox_3d=True,
         with_label_3d=True,
         with_bbox_depth=True),
@@ -31,8 +29,7 @@ train_pipeline = [
     dict(
         type='Collect3D',
         keys=[
-            'img', 'gt_bboxes', 'gt_labels', 'attr_labels', 'gt_bboxes_3d',
-            'gt_labels_3d', 'centers2d', 'depths'
+            'img', 'gt_bboxes', 'gt_labels', 'gt_bboxes_3d', 'gt_labels_3d', 'centers2d', 'depths'
         ]),
 ]
 test_pipeline = [

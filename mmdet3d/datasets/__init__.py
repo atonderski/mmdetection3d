@@ -33,6 +33,7 @@ from .sunrgbd_dataset import SUNRGBDDataset
 from .utils import get_loading_pipeline
 from .waymo_dataset import WaymoDataset
 from .zen_dataset import ZenDataset
+from .zen_mono_dataset import ZenMonoDataset
 
 __all__ = [
     "KittiDataset",
@@ -82,4 +83,5 @@ __all__ = [
     "RandomRotate",
     "MultiViewWrapper",
     "ZenDataset",
+    "ZenMonoDataset",
 ]
