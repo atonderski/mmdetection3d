@@ -1,0 +1,4 @@
+[submodule "agp"]
+	path = agp
+	url = ssh://gerrit.cicd.autoheim.net:29418/agp
+	branch = work/zod

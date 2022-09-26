@@ -7,11 +7,12 @@ import mmcv
 import numpy as np
 from pyquaternion import Quaternion
 
+from agp.zod.frames.zod_frames import ZodFrames
+from agp.zod.utils.constants import CAMERA_FRONT, LIDAR_VELODYNE
+from agp.zod.utils.dataclasses import (CameraCalibration, LidarCalibration,
+                                       OXTSData, Pose, SensorFrame)
 from mmdet3d.core.bbox.structures.utils import points_cam2img
 from mmdet3d.datasets import ZenDataset
-from mmdet3d.zod_tmp import (CAMERA_FRONT, LIDAR_VELODYNE, CameraCalibration,
-                             LidarCalibration, OXTSData, Pose, SensorFrame,
-                             ZodFrames)
 
 
 def create_zen_infos(
@@ -115,9 +116,9 @@ def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10, use_blur=True)
 
         # obtain annotation
         annos = zod.read_dynamic_objects(frame_id)
-        locs = np.array([b.pos for b in annos]).reshape(-1, 3)
-        dims = np.array([b.lwh for b in annos]).reshape(-1, 3)
-        rots = np.array([b.rot.yaw_pitch_roll[0] for b in annos]).reshape(-1, 1)
+        locs = np.array([b.box3d.center for b in annos]).reshape(-1, 3)
+        dims = np.array([b.box3d.size for b in annos]).reshape(-1, 3)
+        rots = np.array([b.box3d.orientation.yaw_pitch_roll[0] for b in annos]).reshape(-1, 1)
         gt_boxes = np.concatenate([locs, dims, rots], axis=1)
         # valid_flag = np.array(
         #     [
@@ -302,7 +303,6 @@ def get_2d_boxes(image_id, info, cam_info, mono3d=True):
             # box is (x, y, z, l, w, h, yaw) in lidar coordinates
             # convert to camera coordinates
             box = box.copy()
-            # box[1] += 10.
             box[:3] = lidar2cam_r.rotation_matrix@box[:3] + lidar2cam_t
             rot_lidar = Quaternion(axis=(0, 0, 1), radians=box[6])
             rot_cam = lidar2cam_r * rot_lidar

@@ -35,4 +35,4 @@ ENV FORCE_CUDA="1"
 RUN pip install -r requirements/build.txt
 RUN pip install dataclass-wizard h5py open3d --ignore-installed PyYAML
 RUN pip install --no-cache-dir -e .
-ENV PYTHONPATH=.
+ENV PYTHONPATH='.;./agp'
