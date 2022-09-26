@@ -11,6 +11,7 @@ from agp.zod.frames.zod_frames import ZodFrames
 from agp.zod.utils.constants import CAMERA_FRONT, LIDAR_VELODYNE
 from agp.zod.utils.dataclasses import (CameraCalibration, LidarCalibration,
                                        OXTSData, Pose, SensorFrame)
+from agp.zod.utils.objects import Box3D
 from mmdet3d.core.bbox.structures.utils import points_cam2img
 from mmdet3d.datasets import ZenDataset
 
@@ -276,14 +277,7 @@ def get_2d_boxes(image_id, info, cam_info, mono3d=True):
             `sample_data_token`.
     """
     records = []
-
-    cam2lidar = np.eye(4)
-    cam2lidar[:3, :3] = cam_info["sensor2lidar_rotation"]
-    cam2lidar[:3, 3] = cam_info["sensor2lidar_translation"]
-    lidar2cam = np.linalg.inv(cam2lidar)
-    lidar2cam_t = lidar2cam[:3, 3]
-    lidar2cam_r = Quaternion(matrix=lidar2cam[:3, :3])
-
+    cam2lidar = Pose.from_translation_rotation(cam_info["sensor2lidar_translation"], cam_info["sensor2lidar_rotation"])
     assert len(info["gt_boxes"]) == len(info["gt_names"]) == len(info["gt_boxes_2d"])
     for box, box2d, name in zip(info["gt_boxes"], info["gt_boxes_2d"], info["gt_names"]):
         # Generate dictionary record to be included in the .json file.
@@ -303,15 +297,12 @@ def get_2d_boxes(image_id, info, cam_info, mono3d=True):
             # box is (x, y, z, l, w, h, yaw) in lidar coordinates
             # convert to camera coordinates
             box = box.copy()
-            box[:3] = lidar2cam_r.rotation_matrix@box[:3] + lidar2cam_t
-            rot_lidar = Quaternion(axis=(0, 0, 1), radians=box[6])
-            rot_cam = lidar2cam_r * rot_lidar
+            box = Box3D(box[:3], box[3:6], Quaternion(axis=(0, 0, 1), radians=box[6]), frame=LIDAR_VELODYNE)
+            box._transform_inv(cam2lidar, CAMERA_FRONT)
 
-            loc = box[:3].tolist()
-            dim = box[3:6][[0,2,1]].tolist()  # dimensions in cam coords are (l, h, w)
-            # camera coordinate system in the vehicle frame is (right, down, forward)
-            # we want the rotation about the "up" axis
-            rot = [-rot_cam.yaw_pitch_roll[0]]
+            loc = box.center.tolist()
+            dim = box.size[[0,2,1]].tolist()  # mmdet dimensions in cam coords are (l, h, w)
+            rot = [-box.orientation.yaw_pitch_roll[0]]  # rotation about gravity axis
             record["bbox_cam3d"] = loc + dim + rot
 
             center3d = np.array(loc).reshape([1, 3])
