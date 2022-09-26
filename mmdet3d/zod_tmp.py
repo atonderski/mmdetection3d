@@ -2,7 +2,7 @@ import json
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import h5py
 import numpy as np
@@ -20,6 +20,9 @@ CAMERA_FRONT_BLUR = f"{CAMERA_FRONT}_{BLUR}"
 CAMERA_FRONT_DNAT = f"{CAMERA_FRONT}_{DNAT}"
 CALIBRATION = "calibration"
 OXTS = "oxts"
+LIDARS = (LIDAR_VELODYNE,)
+CAMERAS = (CAMERA_FRONT,)
+EGO = "ego"
 
 # dataset paths
 SINGLE_FRAMES = "single_frames"
@@ -219,13 +222,64 @@ class FrameInformation(JSONSerializable):
 
 
 @dataclass
+class Box3D:
+    """Class to store a 3D bounding box.
+    
+    The box is defined by its center, size, orientation in the given coordinate frame.
+    The size is defined as (length, width, height).
+    """
+
+    center: np.ndarray  # x, y, z
+    size: np.ndarray  # L, W, H
+    orientation: Quaternion
+    frame: str
+
+    def _transform(self, transform: Optional[Pose], frame: str):
+        if transform is not None:
+            self.center = transform.rotation_matrix @ self.center
+            self.center += transform.translation
+            self.orientation = transform.rotation * self.orientation
+            self.frame = frame
+
+    def _transform_inv(self, transform: Optional[Pose], frame: str):
+        if transform is not None:
+            self.center -= transform.translation
+            self.center = transform.rotation_matrix.T @ self.center
+            self.orientation = transform.rotation.inverse * self.orientation
+            self.frame = frame
+
+    def convert_to(self, frame: str, calib: Calibration):
+        if frame == self.frame:
+            return
+        # convert box to ego frame
+        if self.frame in LIDARS:
+            extrinsics = calib.lidars[self.frame].extrinsics
+        elif self.frame in CAMERAS:
+            extrinsics = calib.cameras[self.frame].extrinsics
+        elif self.frame == EGO:
+            extrinsics = None
+        else:
+            raise ValueError(f"Invalid source frame {self.frame}")
+        self._transform(extrinsics, frame=EGO)
+        # convert box to target frame
+        if frame in LIDARS:
+            extrinsics = calib.lidars[frame].extrinsics
+        elif frame in CAMERAS:
+            extrinsics = calib.cameras[frame].extrinsics
+        elif frame == EGO:
+            return
+        else:
+            raise ValueError(f"Invalid target frame {frame}")
+        self._transform_inv(extrinsics, frame=frame)
+                    
+            
+        
+@dataclass
 class DynamicObject:
     """Class to store dynamic object information."""
 
-    pos: np.ndarray
-    lwh: np.ndarray
-    rot: Quaternion
     box2d: np.ndarray  # 2d bounding box in xyxy format
+    box3d: Box3D
     name: str
 
     @classmethod
@@ -265,23 +319,24 @@ class DynamicObject:
         box2d = np.array(
             [box2d[:, 0].min(), box2d[:, 1].min(), box2d[:, 0].max(), box2d[:, 1].max()]
         )
-        pos = np.array(data["properties"]["location_3d"]["coordinates"])
-        lwh = np.array(
-            [
-                data["properties"]["size_3d_length"],
-                data["properties"]["size_3d_width"],
-                data["properties"]["size_3d_height"],
-            ]
+        box3d = Box3D(
+            center=np.array(data["properties"]["location_3d"]["coordinates"]),
+            size=np.array(
+                [
+                    data["properties"]["size_3d_length"],
+                    data["properties"]["size_3d_width"],
+                    data["properties"]["size_3d_height"],
+                ]
+            ),
+            orientation=Quaternion(
+                data["properties"]["orientation_3d_qw"],
+                data["properties"]["orientation_3d_qx"],
+                data["properties"]["orientation_3d_qy"],
+                data["properties"]["orientation_3d_qz"],
+            ),
+            frame=LIDAR_VELODYNE,
         )
-        rot = Quaternion(
-            w=data["properties"]["orientation_3d_qw"],
-            x=data["properties"]["orientation_3d_qx"],
-            y=data["properties"]["orientation_3d_qy"],
-            z=data["properties"]["orientation_3d_qz"],
-        )
-        return cls(
-            pos=pos, lwh=lwh, rot=rot, box2d=box2d, name=data["properties"]["class"]
-        )
+        return cls(box2d=box2d, box3d=box3d, name=data["properties"]["class"])
 
 
 class ZodFrames(object):
