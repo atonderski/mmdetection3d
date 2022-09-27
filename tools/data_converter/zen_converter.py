@@ -9,9 +9,9 @@ from pyquaternion import Quaternion
 
 from agp.zod.frames.zod_frames import ZodFrames
 from agp.zod.utils.constants import CAMERA_FRONT, LIDAR_VELODYNE
-from agp.zod.utils.dataclasses import (CameraCalibration, LidarCalibration,
-                                       OXTSData, Pose, SensorFrame)
 from agp.zod.utils.objects import Box3D
+from agp.zod.utils.zod_dataclasses import (CameraCalibration, LidarCalibration,
+                                           OXTSData, Pose, SensorFrame)
 from mmdet3d.core.bbox.structures.utils import points_cam2img
 from mmdet3d.datasets import ZenDataset
 

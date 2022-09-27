@@ -30,6 +30,8 @@ RUN pip install --no-cache-dir mmdet==${MMDET} mmsegmentation==${MMSEG}
 
 # Install MMDetection3D
 RUN conda clean --all
+# Need to remove the default opencv
+RUN pip uninstall -y opencv-python
 RUN pip install dataclass-wizard h5py open3d --ignore-installed PyYAML
 COPY . /mmdetection3d
 WORKDIR /mmdetection3d
