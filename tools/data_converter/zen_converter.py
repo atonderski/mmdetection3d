@@ -17,7 +17,7 @@ from mmdet3d.datasets import ZenDataset
 
 
 def create_zen_infos(
-    root_path, info_prefix, version="mini", max_sweeps=10, use_blur=True
+    root_path, info_prefix, version="full", max_sweeps=10, use_blur=True
 ):
     """Create info file of nuscene dataset.
 
@@ -33,8 +33,6 @@ def create_zen_infos(
         use_blur (bool, optional): Whether to use blurred images.
             Default: True.
     """
-    if version != "mini":
-        raise NotImplemented
     zod = ZodFrames(root_path, version)
     train_scenes = zod.get_split("train")
     val_scenes = zod.get_split("val")
