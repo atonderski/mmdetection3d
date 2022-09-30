@@ -1,0 +1,26 @@
+FROM nvcr.io/nvidia/pytorch:22.08-py3
+
+ENV TORCH_CUDA_ARCH_LIST="8.0 8.6+PTX"
+ENV TORCH_NVCC_FLAGS="-Xfatbin -compress-all"
+ENV CMAKE_PREFIX_PATH="$(dirname $(which conda))/../"
+
+ENV DEBIAN_FRONTEND noninteractive
+RUN apt-get update && apt-get install -y ffmpeg libsm6 libxext6 git ninja-build libglib2.0-0 libsm6 libxrender-dev libxext6 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install specific version of MMCV
+RUN pip install -U openmim opencv-python==4.5.5.64
+# Install Open MIM which will solve our mm dependencies
+RUN mim install mmcv-full==1.6.0 -f https://download.openmmlab.com/mmcv/dist/cu117/torch1.13.0/index.html
+RUN mim install mmdet==2.25 mmsegmentation==0.28
+
+# Install some extra dependencies
+RUN mim install dataclass-wizard h5py open3d pyyaml llvmlite --ignore-installed pyyaml llvmlite
+
+# Install MMDetection3D
+COPY . /mmdetection3d
+WORKDIR /mmdetection3d
+ENV FORCE_CUDA="1"
+RUN mim install --no-cache-dir -e .
+ENV PYTHONPATH='.:./agp'
