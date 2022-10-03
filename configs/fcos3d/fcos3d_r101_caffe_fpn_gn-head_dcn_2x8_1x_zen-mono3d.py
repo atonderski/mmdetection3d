@@ -11,7 +11,7 @@ model = dict(
     # default fcos3d head but without velocity and attributes
     bbox_head=dict(
         type='FCOSMono3DHead',
-        num_classes=10,
+        num_classes=3,
         in_channels=256,
         stacked_convs=2,
         feat_channels=256,
@@ -44,12 +44,22 @@ model = dict(
             type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
         loss_centerness=dict(
             type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
-        bbox_coder=dict(type='FCOS3DBBoxCoder', code_size=9),
+        bbox_coder=dict(type='FCOS3DBBoxCoder', code_size=7),
+        bbox_code_size=7,
         norm_on_bbox=True,
         centerness_on_reg=True,
         center_sampling=True,
         conv_bias=True,
-        dcn_on_last_conv=True),
+        dcn_on_last_conv=True
+    ),
+    # Default training config but remove weights for velocity
+    train_cfg=dict(
+        allowed_border=0,
+        code_weight=[1.0, 1.0, 0.2, 1.0, 1.0, 1.0, 1.0],
+        pos_weight=-1,
+        debug=False
+    ),
+
 )
 
 class_names = [

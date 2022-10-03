@@ -228,12 +228,12 @@ def _cam2img_kannala(data, camera_matrix, dist_coeffs):
     """
     assert dist_coeffs is not None, "dist_coeffs must be provided for kannala projection model"
     assert dist_coeffs.shape == (4,), "dist_coeffs should have 4 elements"
-    norm_data = torch.norm(data[:, :2], dim=-1)
-    radial = torch.atan2(norm_data, data[:, 2])
-    radial2 = radial ** 2
-    radial4 = radial2 ** 2
+    norm_data = torch.norm(data[..., :2], dim=-1)
+    radial = torch.atan2(norm_data, data[..., 2])
+    radial2 = radial**2
+    radial4 = radial2**2
     radial6 = radial2 * radial4
-    radial8 = radial4 ** 2
+    radial8 = radial4**2
     distortion_angle = radial * (
         1
         + dist_coeffs[0] * radial2
@@ -241,12 +241,12 @@ def _cam2img_kannala(data, camera_matrix, dist_coeffs):
         + dist_coeffs[2] * radial6
         + dist_coeffs[3] * radial8
     )
-    u_dist = distortion_angle * (data[:, 0] / norm_data)
-    v_dist = distortion_angle * (data[:, 1] / norm_data)
+    u_dist = distortion_angle * (data[..., 0] / norm_data)
+    v_dist = distortion_angle * (data[..., 1] / norm_data)
     pos_u = camera_matrix[0, 0] * u_dist + camera_matrix[0, 2]
     pos_v = camera_matrix[1, 1] * v_dist + camera_matrix[1, 2]
 
-    return torch.stack((pos_u, pos_v, data[:, 2]), -1)
+    return torch.stack((pos_u, pos_v, data[..., 2]), -1)
 
 
 @array_converter(apply_to=('points', 'cam2img'))

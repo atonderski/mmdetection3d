@@ -1,11 +1,14 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-import tempfile
 from os import path as osp
+from typing import List
 
 import mmcv
 import numpy as np
 import pyquaternion
+from mmcv.utils import print_log
 
+from agp.zod.frames.evaluation.object_detection import DetectionBox, EvalBoxes
+from agp.zod.frames.evaluation.object_detection import evaluate as zod_eval
 from ..core import show_result
 from ..core.bbox import Box3DMode, Coord3DMode, LiDARInstance3DBoxes
 from .builder import DATASETS
@@ -253,180 +256,6 @@ class ZenDataset(Custom3DDataset):
         )
         return anns_results
 
-    def _format_bbox(self, results, jsonfile_prefix=None):
-        """Convert the results to the standard format.
-
-        Args:
-            results (list[dict]): Testing results of the dataset.
-            jsonfile_prefix (str): The prefix of the output jsonfile.
-                You can specify the output directory/filename by
-                modifying the jsonfile_prefix. Default: None.
-
-        Returns:
-            str: Path of the output json file.
-        """
-        nusc_annos = {}
-        mapped_class_names = self.CLASSES
-
-        print("Start to convert detection format...")
-        for sample_id, det in enumerate(mmcv.track_iter_progress(results)):
-            annos = []
-            boxes = output_to_nusc_box(det, self.with_velocity)
-            sample_token = self.data_infos[sample_id]["token"]
-            boxes = lidar_nusc_box_to_global(
-                self.data_infos[sample_id],
-                boxes,
-                mapped_class_names,
-                self.eval_detection_configs,
-                self.eval_version,
-            )
-            for i, box in enumerate(boxes):
-                name = mapped_class_names[box.label]
-                if np.sqrt(box.velocity[0] ** 2 + box.velocity[1] ** 2) > 0.2:
-                    if name in [
-                        "car",
-                        "construction_vehicle",
-                        "bus",
-                        "truck",
-                        "trailer",
-                    ]:
-                        attr = "vehicle.moving"
-                    elif name in ["bicycle", "motorcycle"]:
-                        attr = "cycle.with_rider"
-                    else:
-                        attr = NuScenesDataset.DefaultAttribute[name]
-                else:
-                    if name in ["pedestrian"]:
-                        attr = "pedestrian.standing"
-                    elif name in ["bus"]:
-                        attr = "vehicle.stopped"
-                    else:
-                        attr = NuScenesDataset.DefaultAttribute[name]
-
-                nusc_anno = dict(
-                    sample_token=sample_token,
-                    translation=box.center.tolist(),
-                    size=box.wlh.tolist(),
-                    rotation=box.orientation.elements.tolist(),
-                    velocity=box.velocity[:2].tolist(),
-                    detection_name=name,
-                    detection_score=box.score,
-                    attribute_name=attr,
-                )
-                annos.append(nusc_anno)
-            nusc_annos[sample_token] = annos
-        nusc_submissions = {
-            "meta": self.modality,
-            "results": nusc_annos,
-        }
-
-        mmcv.mkdir_or_exist(jsonfile_prefix)
-        res_path = osp.join(jsonfile_prefix, "results_nusc.json")
-        print("Results writes to", res_path)
-        mmcv.dump(nusc_submissions, res_path)
-        return res_path
-
-    def _evaluate_single(
-        self, result_path, logger=None, metric="bbox", result_name="pts_bbox"
-    ):
-        """Evaluation for a single model in nuScenes protocol.
-
-        Args:
-            result_path (str): Path of the result file.
-            logger (logging.Logger | str, optional): Logger used for printing
-                related information during evaluation. Default: None.
-            metric (str, optional): Metric name used for evaluation.
-                Default: 'bbox'.
-            result_name (str, optional): Result name in the metric prefix.
-                Default: 'pts_bbox'.
-
-        Returns:
-            dict: Dictionary of evaluation details.
-        """
-        from nuscenes import NuScenes
-        from nuscenes.eval.detection.evaluate import NuScenesEval
-
-        output_dir = osp.join(*osp.split(result_path)[:-1])
-        nusc = NuScenes(version=self.version, dataroot=self.data_root, verbose=False)
-        eval_set_map = {
-            "v1.0-mini": "mini_val",
-            "v1.0-trainval": "val",
-        }
-        nusc_eval = NuScenesEval(
-            nusc,
-            config=self.eval_detection_configs,
-            result_path=result_path,
-            eval_set=eval_set_map[self.version],
-            output_dir=output_dir,
-            verbose=False,
-        )
-        nusc_eval.main(render_curves=False)
-
-        # record metrics
-        metrics = mmcv.load(osp.join(output_dir, "metrics_summary.json"))
-        detail = dict()
-        metric_prefix = f"{result_name}_NuScenes"
-        for name in self.CLASSES:
-            for k, v in metrics["label_aps"][name].items():
-                val = float("{:.4f}".format(v))
-                detail["{}/{}_AP_dist_{}".format(metric_prefix, name, k)] = val
-            for k, v in metrics["label_tp_errors"][name].items():
-                val = float("{:.4f}".format(v))
-                detail["{}/{}_{}".format(metric_prefix, name, k)] = val
-            for k, v in metrics["tp_errors"].items():
-                val = float("{:.4f}".format(v))
-                detail["{}/{}".format(metric_prefix, self.ErrNameMapping[k])] = val
-
-        detail["{}/NDS".format(metric_prefix)] = metrics["nd_score"]
-        detail["{}/mAP".format(metric_prefix)] = metrics["mean_ap"]
-        return detail
-
-    def format_results(self, results, jsonfile_prefix=None):
-        """Format the results to json (standard format for COCO evaluation).
-
-        Args:
-            results (list[dict]): Testing results of the dataset.
-            jsonfile_prefix (str): The prefix of json files. It includes
-                the file path and the prefix of filename, e.g., "a/b/prefix".
-                If not specified, a temp file will be created. Default: None.
-
-        Returns:
-            tuple: Returns (result_files, tmp_dir), where `result_files` is a
-                dict containing the json filepaths, `tmp_dir` is the temporal
-                directory created for saving json files when
-                `jsonfile_prefix` is not specified.
-        """
-        assert isinstance(results, list), "results must be a list"
-        assert len(results) == len(
-            self
-        ), "The length of results is not equal to the dataset len: {} != {}".format(
-            len(results), len(self)
-        )
-
-        if jsonfile_prefix is None:
-            tmp_dir = tempfile.TemporaryDirectory()
-            jsonfile_prefix = osp.join(tmp_dir.name, "results")
-        else:
-            tmp_dir = None
-
-        # currently the output prediction results could be in two formats
-        # 1. list of dict('boxes_3d': ..., 'scores_3d': ..., 'labels_3d': ...)
-        # 2. list of dict('pts_bbox' or 'img_bbox':
-        #     dict('boxes_3d': ..., 'scores_3d': ..., 'labels_3d': ...))
-        # this is a workaround to enable evaluation of both formats on nuScenes
-        # refer to https://github.com/open-mmlab/mmdetection3d/issues/449
-        if not ("pts_bbox" in results[0] or "img_bbox" in results[0]):
-            result_files = self._format_bbox(results, jsonfile_prefix)
-        else:
-            # should take the inner dict out of 'pts_bbox' or 'img_bbox' dict
-            result_files = dict()
-            for name in results[0]:
-                print(f"\nFormating bboxes of {name}")
-                results_ = [out[name] for out in results]
-                tmp_file_ = osp.join(jsonfile_prefix, name)
-                result_files.update({name: self._format_bbox(results_, tmp_file_)})
-        return result_files, tmp_dir
-
     def evaluate(
         self,
         results,
@@ -459,23 +288,54 @@ class ZenDataset(Custom3DDataset):
         Returns:
             dict[str, float]: Results of each evaluation metric.
         """
-        result_files, tmp_dir = self.format_results(results, jsonfile_prefix)
+        det_boxes, gt_boxes = EvalBoxes(), EvalBoxes()
+        for idx, (det, info) in enumerate(zip(results, self.data_infos)):
+            frame_id = info["frame_id"]
+            det_boxes.add_boxes(frame_id, self._det_to_zen(det, frame_id))
+            gt_boxes.add_boxes(frame_id, self._gt_to_zen(idx, frame_id))
 
-        if isinstance(result_files, dict):
-            results_dict = dict()
-            for name in result_names:
-                print("Evaluating bboxes of {}".format(name))
-                ret_dict = self._evaluate_single(result_files[name])
-            results_dict.update(ret_dict)
-        elif isinstance(result_files, str):
-            results_dict = self._evaluate_single(result_files)
-
-        if tmp_dir is not None:
-            tmp_dir.cleanup()
+        results_dict = zod_eval.evaluate(gt_boxes, det_boxes)
+        print_log(results_dict, logger=logger)
 
         if show or out_dir:
             self.show(results, out_dir, show=show, pipeline=pipeline)
         return results_dict
+
+    def _det_to_zen(self, det: dict, frame_id: str) -> List[DetectionBox]:
+        dets = []
+        for box3d, label, score in zip(
+            det["boxes_3d"].tensor.numpy(),
+            det["labels_3d"].numpy(),
+            det["scores_3d"].numpy(),
+        ):
+            dets.append(self._obj_to_zen(frame_id, box3d, label, score))
+        return dets
+
+    def _gt_to_zen(self, idx: int, frame_id: str) -> List[DetectionBox]:
+        anno: dict = self.get_ann_info(idx)
+        gts = []
+        for box3d, label in zip(anno["gt_bboxes_3d"], anno["gt_labels_3d"]):
+            gts.append(self._obj_to_zen(frame_id, box3d, label))
+        return gts
+
+    def _obj_to_zen(self, frame_id: str, box3d: np.ndarray, label: int, score: float = -1.0) -> DetectionBox:
+        # object is in lidar frame - meaning that the rotation is around the z-axis
+        rot = pyquaternion.Quaternion(axis=(0, 0, 1), radians=box3d[6:])
+
+        # ego translation is same as translation since world is ego-centered
+        box = DetectionBox(
+            sample_token=frame_id,
+            translation=tuple(box3d[:3]),
+            size=tuple(box3d[3:6]),
+            rotation=tuple(rot.elements),
+            ego_translation=tuple(box3d[:3]),
+            detection_name=self.CLASSES[int(label)],
+            detection_score=float(score),
+        )
+        return box
+
+
+    #### END Zen evaluation ####
 
     def _build_default_pipeline(self):
         """Build the default pipeline for this dataset."""
@@ -535,86 +395,3 @@ class ZenDataset(Custom3DDataset):
             show_result(
                 points, show_gt_bboxes, show_pred_bboxes, out_dir, file_name, show
             )
-
-
-def output_to_nusc_box(detection, with_velocity=True):
-    """Convert the output to the box class in the nuScenes.
-
-    Args:
-        detection (dict): Detection results.
-
-            - boxes_3d (:obj:`BaseInstance3DBoxes`): Detection bbox.
-            - scores_3d (torch.Tensor): Detection scores.
-            - labels_3d (torch.Tensor): Predicted box labels.
-
-    Returns:
-        list[:obj:`NuScenesBox`]: List of standard NuScenesBoxes.
-    """
-    box3d = detection["boxes_3d"]
-    scores = detection["scores_3d"].numpy()
-    labels = detection["labels_3d"].numpy()
-
-    box_gravity_center = box3d.gravity_center.numpy()
-    box_dims = box3d.dims.numpy()
-    box_yaw = box3d.yaw.numpy()
-
-    # our LiDAR coordinate system -> nuScenes box coordinate system
-    nus_box_dims = box_dims[:, [1, 0, 2]]
-
-    box_list = []
-    for i in range(len(box3d)):
-        quat = pyquaternion.Quaternion(axis=[0, 0, 1], radians=box_yaw[i])
-        if with_velocity:
-            velocity = (*box3d.tensor[i, 7:9], 0.0)
-        else:
-            velocity = (0, 0, 0)
-        # velo_val = np.linalg.norm(box3d[i, 7:9])
-        # velo_ori = box3d[i, 6]
-        # velocity = (
-        # velo_val * np.cos(velo_ori), velo_val * np.sin(velo_ori), 0.0)
-        box = NuScenesBox(
-            box_gravity_center[i],
-            nus_box_dims[i],
-            quat,
-            label=labels[i],
-            score=scores[i],
-            velocity=velocity,
-        )
-        box_list.append(box)
-    return box_list
-
-
-def lidar_nusc_box_to_global(
-    info, boxes, classes, eval_configs, eval_version="detection_cvpr_2019"
-):
-    """Convert the box from ego to global coordinate.
-
-    Args:
-        info (dict): Info for a specific sample data, including the
-            calibration information.
-        boxes (list[:obj:`NuScenesBox`]): List of predicted NuScenesBoxes.
-        classes (list[str]): Mapped classes in the evaluation.
-        eval_configs (object): Evaluation configuration object.
-        eval_version (str, optional): Evaluation version.
-            Default: 'detection_cvpr_2019'
-
-    Returns:
-        list: List of standard NuScenesBoxes in the global
-            coordinate.
-    """
-    box_list = []
-    for box in boxes:
-        # Move box to ego vehicle coord system
-        box.rotate(pyquaternion.Quaternion(info["lidar2ego_rotation"]))
-        box.translate(np.array(info["lidar2ego_translation"]))
-        # filter det in ego.
-        cls_range_map = eval_configs.class_range
-        radius = np.linalg.norm(box.center[:2], 2)
-        det_range = cls_range_map[classes[box.label]]
-        if radius > det_range:
-            continue
-        # Move box to global coord system
-        box.rotate(pyquaternion.Quaternion(info["ego2global_rotation"]))
-        box.translate(np.array(info["ego2global_translation"]))
-        box_list.append(box)
-    return box_list

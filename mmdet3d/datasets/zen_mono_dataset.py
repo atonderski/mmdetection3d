@@ -1,21 +1,24 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import copy
-import warnings
-from os import path as osp
+from collections import defaultdict
+from typing import List
 
-import mmcv
 import numpy as np
+import pyquaternion
+import torch
+from mmcv.utils import print_log
 
-from mmdet.datasets import CocoDataset
-from ..core import show_multi_modality_result
-from ..core.bbox import CameraInstance3DBoxes, get_box_type
+from agp.zod.frames.evaluation.object_detection import DetectionBox, EvalBoxes
+from agp.zod.frames.evaluation.object_detection import evaluate as zod_eval
+from mmdet3d.core.bbox.structures.utils import points_cam2img
+from mmdet3d.core.evaluation.kitti_utils.eval import kitti_eval
+from mmdet3d.datasets.nuscenes_mono_dataset import NuScenesMonoDataset
+from ..core.bbox import CameraInstance3DBoxes
 from .builder import DATASETS
-from .pipelines import Compose
-from .utils import extract_result_dict, get_loading_pipeline
 
 
 @DATASETS.register_module()
-class ZenMonoDataset(CocoDataset):
+class ZenMonoDataset(NuScenesMonoDataset):
     r"""Monocular 3D detection on NuScenes Dataset.
 
     This class serves as the API for experiments on the NuScenes Dataset.
@@ -48,111 +51,37 @@ class ZenMonoDataset(CocoDataset):
         "vehicle",
         "vulnerable_vehicle",
         "pedestrian",
-        "animal",
     )
-    # https://github.com/nutonomy/nuscenes-devkit/blob/57889ff20678577025326cfc24e57424a829be0a/python-sdk/nuscenes/eval/detection/evaluate.py#L222 # noqa
-    ErrNameMapping = {
-        'trans_err': 'mATE',
-        'scale_err': 'mASE',
-        'orient_err': 'mAOE',
-        'vel_err': 'mAVE',
-        'attr_err': 'mAAE'
+
+    CLASSES_TO_KITTI = {
+        "vehicle": "Car",
+        "vulnerable_vehicle": "Cyclist",
+        "pedestrian": "Pedestrian",
     }
 
-    def __init__(self,
-                 data_root,
-                 ann_file,
-                 pipeline,
-                 load_interval=1,
-                 modality=None,
-                 box_type_3d='Camera',
-                 eval_version='detection_cvpr_2019',
-                 use_valid_flag=False,
-                 classes=None,
-                 img_prefix='',
-                 seg_prefix=None,
-                 proposal_file=None,
-                 test_mode=False,
-                 filter_empty_gt=True,
-                 file_client_args=dict(backend='disk')):
-        self.ann_file = ann_file
-        self.data_root = data_root
-        self.img_prefix = img_prefix
-        self.seg_prefix = seg_prefix
-        self.proposal_file = proposal_file
-        self.test_mode = test_mode
-        self.filter_empty_gt = filter_empty_gt
-        self.CLASSES = self.get_classes(classes)
-        self.file_client = mmcv.FileClient(**file_client_args)
-
-        # load annotations (and proposals)
-        with self.file_client.get_local_path(self.ann_file) as local_path:
-            self.data_infos = self.load_annotations(local_path)
-
-        if self.proposal_file is not None:
-            with self.file_client.get_local_path(
-                    self.proposal_file) as local_path:
-                self.proposals = self.load_proposals(local_path)
-        else:
-            self.proposals = None
-
-        # filter images too small and containing no annotations
-        if not test_mode:
-            valid_inds = self._filter_imgs()
-            self.data_infos = [self.data_infos[i] for i in valid_inds]
-            if self.proposals is not None:
-                self.proposals = [self.proposals[i] for i in valid_inds]
-            # set group flag for the sampler
-            self._set_group_flag()
-
-        # processing pipeline
-        self.pipeline = Compose(pipeline)
-
-        self.load_interval = load_interval
-        self.modality = modality
-        self.box_type_3d, self.box_mode_3d = get_box_type(box_type_3d)
-        # self.eval_version = eval_version
-        self.use_valid_flag = use_valid_flag
-        self.bbox_code_size = 9
-        # if self.eval_version is not None:
-        #     from nuscenes.eval.detection.config import config_factory
-        #     self.eval_detection_configs = config_factory(self.eval_version)
-        if self.modality is None:
-            self.modality = dict(
-                use_camera=True,
-                use_lidar=False,
-                use_radar=False,
-                use_map=False,
-                use_external=False)
-
-    def pre_pipeline(self, results):
-        """Initialization before data preparation.
-
-        Args:
-            results (dict): Dict before data preprocessing.
-
-                - img_fields (list): Image fields.
-                - bbox3d_fields (list): 3D bounding boxes fields.
-                - pts_mask_fields (list): Mask fields of points.
-                - pts_seg_fields (list): Mask fields of point segments.
-                - bbox_fields (list): Fields of bounding boxes.
-                - mask_fields (list): Fields of masks.
-                - seg_fields (list): Segment fields.
-                - box_type_3d (str): 3D box type.
-                - box_mode_3d (str): 3D box mode.
-        """
-        results['img_prefix'] = self.img_prefix
-        results['seg_prefix'] = self.seg_prefix
-        results['proposal_file'] = self.proposal_file
-        results['img_fields'] = []
-        results['bbox3d_fields'] = []
-        results['pts_mask_fields'] = []
-        results['pts_seg_fields'] = []
-        results['bbox_fields'] = []
-        results['mask_fields'] = []
-        results['seg_fields'] = []
-        results['box_type_3d'] = self.box_type_3d
-        results['box_mode_3d'] = self.box_mode_3d
+    def __init__(
+        self,
+        data_root,
+        ann_file,
+        pipeline,
+        load_interval=1,
+        with_velocity=False,
+        eval_version="kitti",
+        version=None,  # TODO: see if needed
+        **kwargs,
+    ):
+        super().__init__(
+            data_root=data_root,
+            ann_file=ann_file,
+            pipeline=pipeline,
+            load_interval=load_interval,
+            with_velocity=with_velocity,
+            eval_version=None,  # Dont pass it to nuscenes
+            version=None,
+            **kwargs,
+        )
+        self.eval_version = eval_version
+        self.bbox_code_size = 7
 
     def _parse_ann_info(self, img_info, ann_info):
         """Parse bbox annotation.
@@ -173,33 +102,33 @@ class ZenMonoDataset(CocoDataset):
         centers2d = []
         depths = []
         for i, ann in enumerate(ann_info):
-            if ann.get('ignore', False):
+            if ann.get("ignore", False):
                 continue
-            x1, y1, w, h = ann['bbox']
-            inter_w = max(0, min(x1 + w, img_info['width']) - max(x1, 0))
-            inter_h = max(0, min(y1 + h, img_info['height']) - max(y1, 0))
+            x1, y1, w, h = ann["bbox"]
+            inter_w = max(0, min(x1 + w, img_info["width"]) - max(x1, 0))
+            inter_h = max(0, min(y1 + h, img_info["height"]) - max(y1, 0))
             if inter_w * inter_h == 0:
                 continue
-            if ann['area'] <= 0 or w < 1 or h < 1:
+            if ann["area"] <= 0 or w < 1 or h < 1:
                 continue
-            if ann['category_id'] not in self.cat_ids:
+            if ann["category_id"] not in self.cat_ids:
                 continue
             bbox = [x1, y1, x1 + w, y1 + h]
-            if ann.get('iscrowd', False):
+            if ann.get("iscrowd", False):
                 gt_bboxes_ignore.append(bbox)
             else:
                 gt_bboxes.append(bbox)
-                gt_labels.append(self.cat2label[ann['category_id']])
-                gt_masks_ann.append(ann.get('segmentation', None))
+                gt_labels.append(self.cat2label[ann["category_id"]])
+                gt_masks_ann.append(ann.get("segmentation", None))
                 # 3D annotations in camera coordinates
-                bbox_cam3d = np.array(ann['bbox_cam3d']).reshape(1, -1)
+                bbox_cam3d = np.array(ann["bbox_cam3d"]).reshape(1, -1)
                 # nan_mask = np.isnan(velo_cam3d[:, 0])
                 # velo_cam3d[nan_mask] = [0.0, 0.0]
                 # bbox_cam3d = np.concatenate([bbox_cam3d, velo_cam3d], axis=-1)
                 gt_bboxes_cam3d.append(bbox_cam3d.squeeze())
                 # 2.5D annotations in camera coordinates
-                center2d = ann['center2d'][:2]
-                depth = ann['center2d'][2]
+                center2d = ann["center2d"][:2]
+                depth = ann["center2d"][2]
                 centers2d.append(center2d)
                 depths.append(depth)
 
@@ -215,23 +144,19 @@ class ZenMonoDataset(CocoDataset):
             centers2d = np.array(centers2d, dtype=np.float32)
             depths = np.array(depths, dtype=np.float32)
         else:
-            gt_bboxes_cam3d = np.zeros((0, self.bbox_code_size),
-                                       dtype=np.float32)
+            gt_bboxes_cam3d = np.zeros((0, self.bbox_code_size), dtype=np.float32)
             centers2d = np.zeros((0, 2), dtype=np.float32)
             depths = np.zeros((0), dtype=np.float32)
 
         gt_bboxes_cam3d = CameraInstance3DBoxes(
-            gt_bboxes_cam3d,
-            box_dim=gt_bboxes_cam3d.shape[-1],
-            origin=(0.5, 0.5, 0.5))
+            gt_bboxes_cam3d, box_dim=gt_bboxes_cam3d.shape[-1], origin=(0.5, 0.5, 0.5)
+        )
         gt_labels_3d = copy.deepcopy(gt_labels)
 
         if gt_bboxes_ignore:
             gt_bboxes_ignore = np.array(gt_bboxes_ignore, dtype=np.float32)
         else:
             gt_bboxes_ignore = np.zeros((0, 4), dtype=np.float32)
-
-        seg_map = img_info['filename'].replace('jpg', 'png')
 
         ann = dict(
             bboxes=gt_bboxes,
@@ -242,103 +167,228 @@ class ZenMonoDataset(CocoDataset):
             depths=depths,
             bboxes_ignore=gt_bboxes_ignore,
             masks=gt_masks_ann,
-            seg_map=seg_map)
+        )
 
         return ann
 
-    def _extract_data(self, index, pipeline, key, load_annos=False):
-        """Load data using input pipeline and extract data according to key.
+    def evaluate(
+        self,
+        results,
+        metric=None,
+        logger=None,
+        jsonfile_prefix=None,
+        # result_names=["img_bbox"],
+        show=False,
+        out_dir=None,
+        pipeline=None,
+    ):
+        """Evaluation in Zen protocol.
 
         Args:
-            index (int): Index for accessing the target data.
-            pipeline (:obj:`Compose`): Composed data loading pipeline.
-            key (str | list[str]): One single or a list of data key.
-            load_annos (bool): Whether to load data annotations.
-                If True, need to set self.test_mode as False before loading.
-
-        Returns:
-            np.ndarray | torch.Tensor | list[np.ndarray | torch.Tensor]:
-                A single or a list of loaded data.
-        """
-        assert pipeline is not None, 'data loading pipeline is not provided'
-        img_info = self.data_infos[index]
-        input_dict = dict(img_info=img_info)
-
-        if load_annos:
-            ann_info = self.get_ann_info(index)
-            input_dict.update(dict(ann_info=ann_info))
-
-        self.pre_pipeline(input_dict)
-        example = pipeline(input_dict)
-
-        # extract data items according to keys
-        if isinstance(key, str):
-            data = extract_result_dict(example, key)
-        else:
-            data = [extract_result_dict(example, k) for k in key]
-
-        return data
-
-    def _get_pipeline(self, pipeline):
-        """Get data loading pipeline in self.show/evaluate function.
-
-        Args:
-            pipeline (list[dict]): Input pipeline. If None is given,
-                get from self.pipeline.
-        """
-        if pipeline is None:
-            if not hasattr(self, 'pipeline') or self.pipeline is None:
-                warnings.warn(
-                    'Use default pipeline for data loading, this may cause '
-                    'errors when data is on ceph')
-                return self._build_default_pipeline()
-            loading_pipeline = get_loading_pipeline(self.pipeline.transforms)
-            return Compose(loading_pipeline)
-        return Compose(pipeline)
-
-    def _build_default_pipeline(self):
-        """Build the default pipeline for this dataset."""
-        pipeline = [
-            dict(type='LoadImageFromFileMono3D'),
-            dict(
-                type='DefaultFormatBundle3D',
-                class_names=self.CLASSES,
-                with_label=False),
-            dict(type='Collect3D', keys=['img'])
-        ]
-        return Compose(pipeline)
-
-    def show(self, results, out_dir, show=False, pipeline=None):
-        """Results visualization.
-
-        Args:
-            results (list[dict]): List of bounding boxes results.
-            out_dir (str): Output directory of visualization result.
-            show (bool): Whether to visualize the results online.
+            results (list[dict]): Testing results of the dataset.
+            metric (str | list[str], optional): Metrics to be evaluated.
+                Defaults to None.
+            logger (logging.Logger | str, optional): Logger used for printing
+                related information during evaluation. Default: None.
+            pklfile_prefix (str, optional): The prefix of pkl files, including
+                the file path and the prefix of filename, e.g., "a/b/prefix".
+                If not specified, a temp file will be created. Default: None.
+            submission_prefix (str, optional): The prefix of submission data.
+                If not specified, the submission data will not be generated.
+            show (bool, optional): Whether to visualize.
                 Default: False.
+            out_dir (str, optional): Path to save the visualization results.
+                Default: None.
             pipeline (list[dict], optional): raw data loading for showing.
                 Default: None.
+
+        Returns:
+            dict[str, float]: Results of each evaluation metric.
         """
-        assert out_dir is not None, 'Expect out_dir, got none.'
-        pipeline = self._get_pipeline(pipeline)
-        for i, result in enumerate(results):
-            if 'img_bbox' in result.keys():
-                result = result['img_bbox']
-            data_info = self.data_infos[i]
-            img_path = data_info['file_name']
-            file_name = osp.split(img_path)[-1].split('.')[0]
-            img, img_metas = self._extract_data(i, pipeline,
-                                                ['img', 'img_metas'])
-            # need to transpose channel to first dim
-            img = img.numpy().transpose(1, 2, 0)
-            gt_bboxes = self.get_ann_info(i)['gt_bboxes_3d']
-            pred_bboxes = result['boxes_3d']
-            show_multi_modality_result(
-                img,
-                gt_bboxes,
-                pred_bboxes,
-                img_metas['cam2img'],
-                out_dir,
-                file_name,
-                box_mode='camera',
-                show=show)
+        assert len(results[0]) == 1 and "img_bbox" in results[0], print(results[0])
+        results = [res["img_bbox"] for res in results]
+
+        if self.eval_version == "kitti":
+            eval_results = self._evaluate_kitti(results, logger)
+        elif self.eval_version == "zen":
+            eval_results = self._evaluate_zen(results, logger)
+        else:
+            raise ValueError("Unsupported eval_version: {}".format(self.eval_version))
+        if show or out_dir:
+            self.show(results, out_dir, show=show, pipeline=pipeline)
+        return eval_results
+
+    #### Zen evaluation ####
+
+    def _evaluate_zen(self, results, logger) -> dict:
+        """Evaluate in Zen protocol.
+
+        Args:
+            results (list[dict]): Testing results of the dataset.
+            logger (logging.Logger | str, optional): Logger used for printing
+                related information during evaluation. Default: None.
+        """
+        det_boxes, gt_boxes = EvalBoxes(), EvalBoxes()
+        for idx, (det, info) in enumerate(zip(results, self.data_infos)):
+            frame_id = info["frame_id"]
+            det_boxes.add_boxes(frame_id, self._det_to_zen(det, frame_id))
+            gt_boxes.add_boxes(frame_id, self._gt_to_zen(idx, frame_id))
+
+        results_dict = zod_eval.evaluate(gt_boxes, det_boxes)
+        print_log(results_dict, logger=logger)
+        return results_dict
+
+    def _det_to_zen(self, det: dict, frame_id: str) -> List[DetectionBox]:
+        dets = []
+        for box3d, label, score in zip(
+            det["boxes_3d"].tensor.numpy(),
+            det["labels_3d"].numpy(),
+            det["scores_3d"].numpy(),
+        ):
+            dets.append(self._obj_to_zen(frame_id, box3d, label, score))
+        return dets
+
+    def _gt_to_zen(self, idx: int, frame_id: str) -> List[DetectionBox]:
+        anno: dict = self.get_ann_info(idx)
+        gts = []
+        for box3d, label in zip(anno["gt_bboxes_3d"], anno["gt_labels_3d"]):
+            gts.append(self._obj_to_zen(frame_id, box3d, label))
+        return gts
+
+    def _obj_to_zen(self, frame_id: str, box3d: np.ndarray, label: int, score: float = -1.0) -> DetectionBox:
+        # object is in lidar frame - meaning that the rotation is around the y-axis
+        # TODO: check if rotation should be negative
+        rot = pyquaternion.Quaternion(axis=(0, 1, 0), radians=box3d[6:])
+        # TODO: perhaps it should be like this (taken from the kitti code)
+        # q1 = pyquaternion.Quaternion(axis=[0, 0, 1], radians=box_yaw[i])
+        # q2 = pyquaternion.Quaternion(axis=[1, 0, 0], radians=np.pi / 2)
+        # quat = q2 * q1
+
+        # ego translation is same as translation since world is ego-centered
+        box = DetectionBox(
+            sample_token=frame_id,
+            translation=tuple(box3d[:3]),
+            size=tuple(box3d[3:6]),
+            rotation=tuple(rot.elements),
+            ego_translation=tuple(box3d[:3]),
+            detection_name=self.CLASSES[int(label)],
+            detection_score=float(score),
+        )
+        return box
+
+    #### KITTI evaluation ####
+
+    def _evaluate_kitti(self, results, logger) -> dict:
+        dt_annos = [
+            self.pred_to_kitti(pred, info)
+            for pred, info in zip(results, self.data_infos)
+        ]
+        gt_annos = [self.get_kitti_anno(idx) for idx in range(len(dt_annos))]
+
+        current_classes = tuple(self.CLASSES_TO_KITTI[cls] for cls in self.CLASSES)
+        ap_result_str, ap_dict = kitti_eval(
+            gt_annos=gt_annos, dt_annos=dt_annos, current_classes=current_classes
+        )
+        print_log(ap_result_str)
+        return ap_dict
+
+    def pred_to_kitti(self, pred: dict, info: dict):
+        """Convert network predictions to kitti style detections.
+
+        Predictions consist of a dict with:
+            - boxes_3d (:obj:`BaseInstance3DBoxes`): Detection bbox.
+            - scores_3d (torch.Tensor): Detection scores.
+            - labels_3d (torch.Tensor): Predicted box labels.
+        """
+        kitti_dict = defaultdict(list)
+
+        if len(pred["scores_3d"]) > 0:
+            boxes_3d = pred["boxes_3d"]
+            image_shape = boxes_3d.tensor.new_tensor(
+                (info["height"], info["width"])
+            ).numpy()
+            box_corners_in_image = points_cam2img(
+                boxes_3d.corners,
+                proj_mat=info["cam_intrinsic"],
+                dist_coeffs=info["cam_distortion"],
+                proj_model=info["proj_model"],
+            )
+            minxy = torch.min(box_corners_in_image, dim=-2)[0]
+            maxxy = torch.max(box_corners_in_image, dim=-2)[0]
+            boxes_2d = torch.cat([minxy, maxxy])
+
+            for box2d, box3d, label, score in zip(
+                boxes_2d.numpy(),
+                boxes_3d.tensor.numpy(),
+                pred["labels_3d"].numpy(),
+                pred["scores_3d"].numpy(),
+            ):
+                # Post-processing - clip to image boundaries, and discard
+                # check box_preds_camera
+                box2d[2:] = np.minimum(box2d[2:], image_shape[::-1])
+                box2d[:2] = np.maximum(box2d[:2], [0, 0])
+                if (box2d[0] - box2d[2]) * (box2d[1] - box2d[3]) <= 0:
+                    continue
+                zen_name = self.CLASSES[int(label)]
+                kitti_name = self.CLASSES_TO_KITTI[zen_name]
+                kitti_dict["name"].append(kitti_name)
+                kitti_dict["truncated"].append(0.0)
+                kitti_dict["occluded"].append(0)
+                kitti_dict["alpha"].append(-np.arctan2(box3d[0], box3d[2]) + box3d[6])
+                kitti_dict["bbox"].append(box2d)
+                kitti_dict["dimensions"].append(box3d[3:6])
+                kitti_dict["location"].append(box3d[:3])
+                kitti_dict["rotation_y"].append(box3d[6])
+                kitti_dict["score"].append(score)
+
+        if kitti_dict:
+            return {k: np.stack(v) for k, v in kitti_dict.items()}
+        else:
+            return _empty_kitti_dict(with_score=True)
+
+    def get_kitti_anno(self, idx: int):
+        anno: dict = self.get_ann_info(idx)
+        kitti_dict = defaultdict(list)
+        for box3d, box2d, label in zip(
+            anno["gt_bboxes_3d"], anno["bboxes"], anno["gt_labels_3d"]
+        ):
+            box2d_xyxy = np.array(
+                [
+                    box2d[0],
+                    box2d[1],
+                    box2d[0] + box2d[2],
+                    box2d[1] + box2d[3],
+                ]
+            )
+            zen_name = self.CLASSES[int(label)]
+            kitti_name = self.CLASSES_TO_KITTI[zen_name]
+            alpha = np.arctan(-np.arctan2(box3d[0], box3d[2]) + box3d[6])
+            kitti_dict["bbox"].append(box2d_xyxy)
+            kitti_dict["location"].append(box3d[:3])
+            kitti_dict["dimensions"].append(box3d[3:6])
+            kitti_dict["rotation_y"].append(box3d[6])
+            kitti_dict["alpha"].append(alpha)
+            kitti_dict["name"].append(kitti_name)
+            kitti_dict["truncated"].append(0.0)
+            kitti_dict["occluded"].append(0)
+
+        if kitti_dict:
+            return {k: np.stack(v) for k, v in kitti_dict.items()}
+        else:
+            return _empty_kitti_dict(with_score=False)
+
+
+def _empty_kitti_dict(with_score: bool):
+    kitti_dict = {
+        "name": np.array([]),
+        "truncated": np.array([]),
+        "occluded": np.array([]),
+        "alpha": np.array([]),
+        "bbox": np.zeros([0, 4]),
+        "dimensions": np.zeros([0, 3]),
+        "location": np.zeros([0, 3]),
+        "rotation_y": np.array([]),
+    }
+    if with_score:
+        kitti_dict["score"] = np.array([])
+    return kitti_dict
