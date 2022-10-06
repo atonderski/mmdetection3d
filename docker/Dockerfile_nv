@@ -21,10 +21,14 @@ RUN pip install mmcv-full==1.6.0 -f https://download.openmmlab.com/mmcv/dist/cu1
 # Install MMDetection and MMSegmentation
 RUN pip install mmdet==2.25 mmsegmentation==0.28
 
+# Fixes
+RUN pip install pyyaml llvmlite setuptools==59.5.0 --ignore-installed pyyaml llvmlite
+
+# Extra dependencies
+RUN pip install dataclass-wizard h5py open3d wandb
+
 # Install MMDetection3D requirements
 RUN conda clean --all
-RUN pip install llvmlite --ignore-installed
-RUN pip install pyyaml --ignore-installed
 COPY . /mmdetection3d
 WORKDIR /mmdetection3d
 RUN pip install --no-cache-dir -e .

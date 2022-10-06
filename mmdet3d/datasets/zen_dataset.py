@@ -9,6 +9,8 @@ from mmcv.utils import print_log
 
 from agp.zod.frames.evaluation.object_detection import DetectionBox, EvalBoxes
 from agp.zod.frames.evaluation.object_detection import evaluate as zod_eval
+from agp.zod.frames.evaluation.object_detection.utils import \
+    ZOD_NUSCENES_CLASS_MAPPING
 from ..core import show_result
 from ..core.bbox import Box3DMode, Coord3DMode, LiDARInstance3DBoxes
 from .builder import DATASETS
@@ -56,26 +58,16 @@ class ZenDataset(Custom3DDataset):
             Defaults to False.
     """
     NameMapping = {
-        # TODO
         "Vehicle": "vehicle",
         "VulnerableVehicle": "vulnerable_vehicle",
         "Pedestrian": "pedestrian",
-        "Animal": "animal",
-    }
-    # https://github.com/nutonomy/nuscenes-devkit/blob/57889ff20678577025326cfc24e57424a829be0a/python-sdk/nuscenes/eval/detection/evaluate.py#L222 # noqa
-    ErrNameMapping = {
-        "trans_err": "mATE",
-        "scale_err": "mASE",
-        "orient_err": "mAOE",
-        "vel_err": "mAVE",
-        "attr_err": "mAAE",
     }
     CLASSES = (
         "vehicle",
         "vulnerable_vehicle",
         "pedestrian",
-        "animal",
     )
+    _REVERSE_NAME_MAPPING = {v: k for k, v in NameMapping.items()}
 
     def __init__(
         self,
@@ -267,7 +259,7 @@ class ZenDataset(Custom3DDataset):
         out_dir=None,
         pipeline=None,
     ):
-        """Evaluation in nuScenes protocol.
+        """Evaluation in zen protocol.
 
         Args:
             results (list[dict]): Testing results of the dataset.
@@ -288,13 +280,16 @@ class ZenDataset(Custom3DDataset):
         Returns:
             dict[str, float]: Results of each evaluation metric.
         """
+        assert len(results[0]) == 1 and "pts_bbox" in results[0], print(results[0])
+        results = [res["pts_bbox"] for res in results]
+
         det_boxes, gt_boxes = EvalBoxes(), EvalBoxes()
         for idx, (det, info) in enumerate(zip(results, self.data_infos)):
             frame_id = info["frame_id"]
             det_boxes.add_boxes(frame_id, self._det_to_zen(det, frame_id))
             gt_boxes.add_boxes(frame_id, self._gt_to_zen(idx, frame_id))
 
-        results_dict = zod_eval.evaluate(gt_boxes, det_boxes)
+        results_dict = zod_eval(gt_boxes, det_boxes)
         print_log(results_dict, logger=logger)
 
         if show or out_dir:
@@ -323,13 +318,15 @@ class ZenDataset(Custom3DDataset):
         rot = pyquaternion.Quaternion(axis=(0, 0, 1), radians=box3d[6:])
 
         # ego translation is same as translation since world is ego-centered
+        zen_name = self._REVERSE_NAME_MAPPING[self.CLASSES[int(label)]]
+        nusc_name = ZOD_NUSCENES_CLASS_MAPPING[zen_name]
         box = DetectionBox(
             sample_token=frame_id,
             translation=tuple(box3d[:3]),
             size=tuple(box3d[3:6]),
             rotation=tuple(rot.elements),
             ego_translation=tuple(box3d[:3]),
-            detection_name=self.CLASSES[int(label)],
+            detection_name=nusc_name,
             detection_score=float(score),
         )
         return box
@@ -395,3 +392,16 @@ class ZenDataset(Custom3DDataset):
             show_result(
                 points, show_gt_bboxes, show_pred_bboxes, out_dir, file_name, show
             )
+
+
+def flatten_dict(d):
+    """Flatten a dict while concatenating keys."""
+    result = {}
+    for key, value in d.items():
+        if isinstance(value, dict):
+            result.update(
+                {key + "/" + k: v for k, v in flatten_dict(value).items()}
+            )
+        else:
+            result[key] = value
+    return result

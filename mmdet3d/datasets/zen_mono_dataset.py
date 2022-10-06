@@ -10,9 +10,12 @@ from mmcv.utils import print_log
 
 from agp.zod.frames.evaluation.object_detection import DetectionBox, EvalBoxes
 from agp.zod.frames.evaluation.object_detection import evaluate as zod_eval
+from agp.zod.frames.evaluation.object_detection.utils import \
+    ZOD_NUSCENES_CLASS_MAPPING
 from mmdet3d.core.bbox.structures.utils import points_cam2img
 from mmdet3d.core.evaluation.kitti_utils.eval import kitti_eval
 from mmdet3d.datasets.nuscenes_mono_dataset import NuScenesMonoDataset
+from mmdet3d.datasets.zen_dataset import flatten_dict
 from ..core.bbox import CameraInstance3DBoxes
 from .builder import DATASETS
 
@@ -47,17 +50,22 @@ class ZenMonoDataset(NuScenesMonoDataset):
             Defaults to False.
         version (str, optional): Dataset version. Defaults to 'v1.0-trainval'.
     """
+    NameMapping = {
+        "Vehicle": "vehicle",
+        "VulnerableVehicle": "vulnerable_vehicle",
+        "Pedestrian": "pedestrian",
+    }
     CLASSES = (
         "vehicle",
         "vulnerable_vehicle",
         "pedestrian",
     )
-
     CLASSES_TO_KITTI = {
         "vehicle": "Car",
         "vulnerable_vehicle": "Cyclist",
         "pedestrian": "Pedestrian",
     }
+    _REVERSE_NAME_MAPPING = {v: k for k, v in NameMapping.items()}
 
     def __init__(
         self,
@@ -66,7 +74,7 @@ class ZenMonoDataset(NuScenesMonoDataset):
         pipeline,
         load_interval=1,
         with_velocity=False,
-        eval_version="kitti",
+        eval_version="zen",
         version=None,  # TODO: see if needed
         **kwargs,
     ):
@@ -119,7 +127,7 @@ class ZenMonoDataset(NuScenesMonoDataset):
             else:
                 gt_bboxes.append(bbox)
                 gt_labels.append(self.cat2label[ann["category_id"]])
-                gt_masks_ann.append(ann.get("segmentation", None))
+                gt_masks_ann.append(None)
                 # 3D annotations in camera coordinates
                 bbox_cam3d = np.array(ann["bbox_cam3d"]).reshape(1, -1)
                 # nan_mask = np.isnan(velo_cam3d[:, 0])
@@ -234,7 +242,7 @@ class ZenMonoDataset(NuScenesMonoDataset):
             det_boxes.add_boxes(frame_id, self._det_to_zen(det, frame_id))
             gt_boxes.add_boxes(frame_id, self._gt_to_zen(idx, frame_id))
 
-        results_dict = zod_eval.evaluate(gt_boxes, det_boxes)
+        results_dict = flatten_dict(zod_eval(gt_boxes, det_boxes))
         print_log(results_dict, logger=logger)
         return results_dict
 
@@ -265,13 +273,15 @@ class ZenMonoDataset(NuScenesMonoDataset):
         # quat = q2 * q1
 
         # ego translation is same as translation since world is ego-centered
+        zen_name = self._REVERSE_NAME_MAPPING[self.CLASSES[int(label)]]
+        nusc_name = ZOD_NUSCENES_CLASS_MAPPING[zen_name]
         box = DetectionBox(
             sample_token=frame_id,
             translation=tuple(box3d[:3]),
             size=tuple(box3d[3:6]),
             rotation=tuple(rot.elements),
             ego_translation=tuple(box3d[:3]),
-            detection_name=self.CLASSES[int(label)],
+            detection_name=nusc_name,
             detection_score=float(score),
         )
         return box
@@ -315,7 +325,7 @@ class ZenMonoDataset(NuScenesMonoDataset):
             )
             minxy = torch.min(box_corners_in_image, dim=-2)[0]
             maxxy = torch.max(box_corners_in_image, dim=-2)[0]
-            boxes_2d = torch.cat([minxy, maxxy])
+            boxes_2d = torch.cat([minxy, maxxy], dim=-1)
 
             for box2d, box3d, label, score in zip(
                 boxes_2d.numpy(),

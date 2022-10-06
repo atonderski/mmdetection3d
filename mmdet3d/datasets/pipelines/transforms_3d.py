@@ -11,7 +11,7 @@ from mmdet3d.core import VoxelGenerator
 from mmdet3d.core.bbox import (CameraInstance3DBoxes, DepthInstance3DBoxes,
                                LiDARInstance3DBoxes, box_np_ops)
 from mmdet3d.datasets.pipelines.compose import Compose
-from mmdet.datasets.pipelines import RandomCrop, RandomFlip, Rotate
+from mmdet.datasets.pipelines import RandomCrop, RandomFlip, Resize, Rotate
 from ..builder import OBJECTSAMPLERS, PIPELINES
 from .data_augment_utils import noise_per_object_v3_
 
@@ -64,6 +64,32 @@ class RandomDropPointsColor(object):
         repr_str = self.__class__.__name__
         repr_str += f'(drop_ratio={self.drop_ratio})'
         return repr_str
+
+
+@PIPELINES.register_module()
+class ResizeMono3D(Resize):
+    """Resize the input image, bounding boxes, masks, semantic segmentation map,
+    and projected centerpoints."""
+
+    def __call__(self, results):
+        """Call function to resize images, bounding boxes, masks, semantic
+        segmentation map, and projected centerpoints.
+
+        Args:
+            results (dict): Result dict from loading pipeline.
+
+        Returns:
+            dict: Results after resizing, 'img_shape' key is updated in the
+                result dict.
+        """
+        results = super(ResizeMono3D, self).__call__(results)
+        if 'centers2d' in results:
+            results['centers2d'][..., :2] *= results['scale_factor'][:2]
+            if self.bbox_clip_border:
+                img_shape = results['img_shape']
+                results['centers2d'][:, 0] = np.clip(results['centers2d'][:, 0], 0, img_shape[1])
+                results['centers2d'][:, 1] = np.clip(results['centers2d'][:, 1], 0, img_shape[0])
+        return results
 
 
 @PIPELINES.register_module()

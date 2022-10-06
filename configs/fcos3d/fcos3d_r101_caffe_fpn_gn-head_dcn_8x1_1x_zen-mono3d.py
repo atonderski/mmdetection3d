@@ -10,56 +10,24 @@ model = dict(
     ),
     # default fcos3d head but without velocity and attributes
     bbox_head=dict(
-        type='FCOSMono3DHead',
         num_classes=3,
-        in_channels=256,
-        stacked_convs=2,
-        feat_channels=256,
-        use_direction_classifier=True,
-        diff_rad_by_sin=True,
         pred_attrs=False,
         pred_velo=False,
-        dir_offset=0.7854,  # pi/4
-        dir_limit_offset=0,
-        strides=[8, 16, 32, 64, 128],
         group_reg_dims=(2, 1, 3, 1),  # offset, depth, size, rot
-        cls_branch=(256, ),
         reg_branch=(
             (256, ),  # offset
             (256, ),  # depth
             (256, ),  # size
             (256, ),  # rot
         ),
-        dir_branch=(256, ),
-        loss_cls=dict(
-            type='FocalLoss',
-            use_sigmoid=True,
-            gamma=2.0,
-            alpha=0.25,
-            loss_weight=1.0),
-        loss_bbox=dict(type='SmoothL1Loss', beta=1.0 / 9.0, loss_weight=1.0),
-        loss_dir=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
-        loss_attr=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
-        loss_centerness=dict(
-            type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
         bbox_coder=dict(type='FCOS3DBBoxCoder', code_size=7),
         bbox_code_size=7,
-        norm_on_bbox=True,
-        centerness_on_reg=True,
-        center_sampling=True,
-        conv_bias=True,
-        dcn_on_last_conv=True
     ),
     # Default training config but remove weights for velocity
     train_cfg=dict(
-        allowed_border=0,
         code_weight=[1.0, 1.0, 0.2, 1.0, 1.0, 1.0, 1.0],
-        pos_weight=-1,
-        debug=False
+        debug=True
     ),
-
 )
 
 class_names = [
@@ -77,8 +45,7 @@ train_pipeline = [
         with_bbox_3d=True,
         with_label_3d=True,
         with_bbox_depth=True),
-    dict(type='Resize', img_scale=(1920, 1056), keep_ratio=True),
-    dict(type='RandomFlip3D', flip_ratio_bev_horizontal=0.5),
+    dict(type='ResizeMono3D', img_scale=(1920, 1056), keep_ratio=True),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
@@ -96,7 +63,7 @@ test_pipeline = [
         scale_factor=1.0,
         flip=False,
         transforms=[
-            dict(type='RandomFlip3D'),
+            dict(type='ResizeMono3D', img_scale=(1920, 1056), keep_ratio=True),
             dict(type='Normalize', **img_norm_cfg),
             dict(type='Pad', size_divisor=32),
             dict(
@@ -107,14 +74,22 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    samples_per_gpu=2,
-    workers_per_gpu=2,
-    train=dict(pipeline=train_pipeline),
-    val=dict(pipeline=test_pipeline),
+    samples_per_gpu=8,
+    workers_per_gpu=8,
+    train=dict(
+        # times=50,
+        dataset=dict(
+            pipeline=train_pipeline,
+            # ann_file='data/zod/zen-single_infos_mono3d.coco.json',
+            )),  # Train is a wrapped dataset
+    val=dict(
+        pipeline=test_pipeline,
+        # ann_file='data/zod/zen-single_infos_mono3d.coco.json',
+    ),
     test=dict(pipeline=test_pipeline))
 # optimizer
 optimizer = dict(
-    lr=0.002, paramwise_cfg=dict(bias_lr_mult=2., bias_decay_mult=0.))
+    lr=0.001, paramwise_cfg=dict(bias_lr_mult=2., bias_decay_mult=0.))
 optimizer_config = dict(
     _delete_=True, grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
@@ -126,3 +101,19 @@ lr_config = dict(
     step=[8, 11])
 total_epochs = 12
 evaluation = dict(interval=2)
+
+log_config = dict(
+    # interval=50,
+    hooks=[
+        dict(type='TextLoggerHook'),
+        dict(
+            type='MMDet3DWandbHook',
+            init_kwargs=dict(
+                project='mmdet-test',
+                name='fcos3d_mono_zen',
+            ),
+            log_checkpoint=False,
+            log_checkpoint_metadata=False,
+            num_eval_images=10,
+            bbox_score_thr=0.1,
+        )])
