@@ -182,6 +182,8 @@ def points_cam2img(points_3d, proj_mat, with_depth=False, dist_coeffs=(), proj_m
             Transformation matrix between coordinates.
         with_depth (bool, optional): Whether to keep depth in the output.
             Defaults to False.
+        dist_coeffs (tuple): Distortion coefficients
+        proj_model (str): which projection model to use, default is pinhole
 
     Returns:
         (torch.Tensor | np.ndarray): Points in image coordinates,

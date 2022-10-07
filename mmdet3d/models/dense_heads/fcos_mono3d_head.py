@@ -600,6 +600,8 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
         """
         view = np.array(input_meta['cam2img'])
         scale_factor = input_meta['scale_factor']
+        if not isinstance(scale_factor, float):
+            scale_factor = scale_factor[:2]
         cfg = self.test_cfg if cfg is None else cfg
         assert len(cls_scores) == len(bbox_preds) == len(mlvl_points)
         mlvl_centers2d = []
