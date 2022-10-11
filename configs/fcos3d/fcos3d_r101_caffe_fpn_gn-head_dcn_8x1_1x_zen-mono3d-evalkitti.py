@@ -12,10 +12,10 @@ data = dict(
     train=dict(
         times=240,
         dataset=dict(
-            ann_file='data/zod/zen-single_infos_mono3d.coco.json',
+            ann_file='data/zod/mmdet3d/zen-single_infos_train_mono3d.coco.json',
             )),  # Train is a wrapped dataset
     val=dict(
-        ann_file='data/zod/zen-single_infos_mono3d.coco.json',
+        ann_file='data/zod/mmdet3d/zen-single_infos_val_mono3d.coco.json',
     ),
 )
 

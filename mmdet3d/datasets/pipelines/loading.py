@@ -93,7 +93,8 @@ class LoadImageFromFileMono3D(LoadImageFromFile):
         """
         super().__call__(results)
         results['cam2img'] = results['img_info']['cam_intrinsic']
-        results['dist_coeffs'] = results['img_info'].get('cam_distortion', None)
+        results['distortion'] = results['img_info'].get('cam_distortion')
+        results['undistortion'] = results['img_info'].get('cam_undistortion')
         results['proj_model'] = results['img_info'].get('proj_model', 'pinhole')
         return results
 

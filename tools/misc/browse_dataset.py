@@ -10,6 +10,7 @@ from mmcv import Config, DictAction, mkdir_or_exist
 
 from mmdet3d.core.bbox import (Box3DMode, CameraInstance3DBoxes, Coord3DMode,
                                DepthInstance3DBoxes, LiDARInstance3DBoxes)
+from mmdet3d.core.bbox.structures.utils import points_img2cam
 from mmdet3d.core.visualizer import (show_multi_modality_result, show_result,
                                      show_seg_result)
 from mmdet3d.datasets import build_dataset
@@ -195,6 +196,7 @@ def show_proj_bbox_img(input, out_dir, show=False, is_nus_mono=False):
 def show_bbox2d_img(input, out_dir, class_names, show=False):
     """Visualize 2D bboxes on image."""
     gt_bboxes = input['gt_bboxes']._data
+    centers2d = input['centers2d']._data
     gt_labels = input['gt_labels']._data
     img_metas = input['img_metas']._data
     img = input['img']._data.numpy()
@@ -219,6 +221,24 @@ def show_bbox2d_img(input, out_dir, class_names, show=False):
             class_names=class_names,
             show=show,
         )
+        for center in centers2d:
+            # draw a cross on the center of the box
+            import cv2
+            img = cv2.line(
+                img,
+                (int(center[0] - 5), int(center[1])),
+                (int(center[0] + 5), int(center[1])),
+                (0, 0, 255),
+                1,
+            )
+            img = cv2.line(
+                img,
+                (int(center[0]), int(center[1] - 5)),
+                (int(center[0]), int(center[1] + 5)),
+                (0, 0, 255),
+                1,
+            )
+
         img = mmcv.rgb2bgr(img)
         mmcv.imwrite(img, osp.join(result_path, f'{filename}_2d.png'))
 

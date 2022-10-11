@@ -45,7 +45,7 @@ def get_keypoints(gt_bboxes_3d_list,
         top_bot_centers3d = torch.stack((top_centers3d, bot_centers3d), dim=1)
         keypoints3d = torch.cat((corners3d, top_bot_centers3d), dim=1)
         # (N, 10, 2)
-        keypoints2d = points_cam2img(keypoints3d, cam2img)
+        keypoints2d = points_cam2img(keypoints3d, cam2img, meta=img_metas[i])
 
         # keypoints mask: keypoints must be inside
         # the image and in front of the camera

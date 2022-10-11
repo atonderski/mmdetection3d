@@ -320,8 +320,8 @@ class ZenMonoDataset(NuScenesMonoDataset):
             box_corners_in_image = points_cam2img(
                 boxes_3d.corners,
                 proj_mat=info["cam_intrinsic"],
-                dist_coeffs=info["cam_distortion"],
-                proj_model=info["proj_model"],
+                meta={"distortion": info["cam_distortion"],
+                      "proj_model": info["proj_model"]},
             )
             minxy = torch.min(box_corners_in_image, dim=-2)[0]
             maxxy = torch.max(box_corners_in_image, dim=-2)[0]

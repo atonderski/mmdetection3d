@@ -57,7 +57,7 @@ def point_sample(img_meta,
         points, coord_type, img_meta, reverse=True)
 
     # project points to camera coordinate
-    pts_2d = points_cam2img(points, proj_mat)
+    pts_2d = points_cam2img(points, proj_mat, meta=img_meta)
 
     # img transformation: scale -> crop -> flip
     # the image is resized by img_scale_factor

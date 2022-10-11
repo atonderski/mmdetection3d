@@ -105,8 +105,7 @@ class MMDet3DWandbHook(MMDetWandbHook):
             box_corners_in_image = points_cam2img(
                 boxes_3d.corners,
                 proj_mat=img_info["cam_intrinsic"],
-                dist_coeffs=img_info["cam_distortion"],
-                proj_model=img_info["proj_model"],
+                meta=img_info,
             )
             minxy = torch.min(box_corners_in_image, dim=-2)[0]
             maxxy = torch.max(box_corners_in_image, dim=-2)[0]
