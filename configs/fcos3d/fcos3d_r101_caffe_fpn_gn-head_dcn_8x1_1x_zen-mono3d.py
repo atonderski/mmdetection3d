@@ -80,11 +80,11 @@ data = dict(
         # times=50,
         dataset=dict(
             pipeline=train_pipeline,
-            # ann_file='data/zod/zen-single_infos_mono3d.coco.json',
+            ann_file='data/zod/mmdet3d/zen-single_infos_train_mono3d.coco.json',
             )),  # Train is a wrapped dataset
     val=dict(
         pipeline=test_pipeline,
-        # ann_file='data/zod/zen-single_infos_mono3d.coco.json',
+        ann_file='data/zod/mmdet3d/zen-single_infos_val_mono3d.coco.json',
     ),
     test=dict(pipeline=test_pipeline))
 # optimizer

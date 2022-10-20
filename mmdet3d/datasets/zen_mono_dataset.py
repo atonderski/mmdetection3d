@@ -1,7 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import copy
 from collections import defaultdict
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import pyquaternion
@@ -10,7 +10,8 @@ from mmcv.utils import print_log
 from zod.utils.constants import EVALUATION_CLASSES
 
 from agp.zod.frames.evaluation.object_detection import DetectionBox, EvalBoxes
-from agp.zod.frames.evaluation.object_detection import evaluate as zod_eval
+from agp.zod.frames.evaluation.object_detection import \
+    nuscenes_evaluate as zod_eval
 from mmdet3d.core.bbox.structures.utils import points_cam2img
 from mmdet3d.core.evaluation.kitti_utils.eval import kitti_eval
 from mmdet3d.datasets.nuscenes_mono_dataset import NuScenesMonoDataset
@@ -241,16 +242,16 @@ class ZenMonoDataset(NuScenesMonoDataset):
             det["scores_3d"].numpy(),
         ):
             dets.append(self._obj_to_zen(frame_id, box3d, label, score))
-        return dets
+        return [det for det in dets if det is not None]
 
     def _gt_to_zen(self, idx: int, frame_id: str) -> List[DetectionBox]:
         anno: dict = self.get_ann_info(idx)
         gts = []
         for box3d, label in zip(anno["gt_bboxes_3d"], anno["gt_labels_3d"]):
             gts.append(self._obj_to_zen(frame_id, box3d, label))
-        return gts
+        return [gt for gt in gts if gt is not None]
 
-    def _obj_to_zen(self, frame_id: str, box3d: np.ndarray, label: int, score: float = -1.0) -> DetectionBox:
+    def _obj_to_zen(self, frame_id: str, box3d: np.ndarray, label: int, score: float = -1.0) -> Optional[DetectionBox]:
         # object is in lidar frame - meaning that the rotation is around the y-axis
         # TODO: check if rotation should be negative
         rot = pyquaternion.Quaternion(axis=(0, 1, 0), radians=box3d[6:])
@@ -261,6 +262,8 @@ class ZenMonoDataset(NuScenesMonoDataset):
 
         # ego translation is same as translation since world is ego-centered
         class_name = self.CLASSES[int(label)]
+        if class_name not in EVALUATION_CLASSES:
+            return None
         box = DetectionBox(
             sample_token=frame_id,
             translation=tuple(box3d[:3]),
@@ -281,7 +284,7 @@ class ZenMonoDataset(NuScenesMonoDataset):
         ]
         gt_annos = [self.get_kitti_anno(idx) for idx in range(len(dt_annos))]
 
-        current_classes = tuple(self.CLASSES_TO_KITTI[cls] for cls in self.CLASSES)
+        current_classes = tuple(self.CLASSES_TO_KITTI[cls] for cls in self.CLASSES if cls in self.CLASSES_TO_KITTI)
         ap_result_str, ap_dict = kitti_eval(
             gt_annos=gt_annos, dt_annos=dt_annos, current_classes=current_classes
         )
@@ -326,6 +329,8 @@ class ZenMonoDataset(NuScenesMonoDataset):
                 if (box2d[0] - box2d[2]) * (box2d[1] - box2d[3]) <= 0:
                     continue
                 zen_name = self.CLASSES[int(label)]
+                if zen_name not in self.CLASSES_TO_KITTI:
+                    continue
                 kitti_name = self.CLASSES_TO_KITTI[zen_name]
                 kitti_dict["name"].append(kitti_name)
                 kitti_dict["truncated"].append(0.0)
@@ -357,6 +362,8 @@ class ZenMonoDataset(NuScenesMonoDataset):
                 ]
             )
             zen_name = self.CLASSES[int(label)]
+            if zen_name not in self.CLASSES_TO_KITTI:
+                continue
             kitti_name = self.CLASSES_TO_KITTI[zen_name]
             alpha = np.arctan(-np.arctan2(box3d[0], box3d[2]) + box3d[6])
             kitti_dict["bbox"].append(box2d_xyxy)

@@ -8,7 +8,7 @@ import numpy as np
 from pyquaternion import Quaternion
 
 from agp.zod.frames.zod_frames import ZodFrames
-from agp.zod.utils.constants import CAMERA_FRONT, LIDAR_VELODYNE
+from agp.zod.utils.constants import ALL_CLASSES, CAMERA_FRONT, LIDAR_VELODYNE
 from agp.zod.utils.objects import Box3D
 from agp.zod.utils.zod_dataclasses import (
     CameraCalibration,
@@ -18,7 +18,6 @@ from agp.zod.utils.zod_dataclasses import (
     SensorFrame,
 )
 from mmdet3d.core.bbox.structures.utils import points_cam2img
-from mmdet3d.datasets import ZenDataset
 
 
 def create_zen_infos(
@@ -136,7 +135,7 @@ def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10, use_blur=True)
         annos = zod.read_object_detection_annotation(frame_id)
         locs = np.array([b.box3d.center if b.box3d else [-1,-1,-1] for b in annos]).reshape(-1, 3)
         dims = np.array([b.box3d.size if b.box3d else [-1, -1, -1] for b in annos]).reshape(-1, 3)
-        rots = np.array([b.box3d.orientation.yaw_pitch_roll[0] if b.box3d else [-1] for b in annos]).reshape(
+        rots = np.array([b.box3d.orientation.yaw_pitch_roll[0] if b.box3d else -1 for b in annos]).reshape(
             -1, 1
         )
         gt_boxes = np.concatenate([locs, dims, rots], axis=1)
@@ -237,10 +236,7 @@ def export_2d_annotation(root_path, info_path, version, mono3d=True):
     infos = mmcv.load(info_path)["infos"]
 
     # info_2d_list = []
-    cat2Ids = [
-        dict(id=ZenDataset.CLASSES.index(cat_name), name=cat_name)
-        for cat_name in ZenDataset.CLASSES
-    ]
+    cat2Ids = [dict(id=i, name=cat_name) for i, cat_name in enumerate(ALL_CLASSES)]
     coco_ann_id = 0
     coco_2d_dict = dict(annotations=[], images=[], categories=cat2Ids)
     for info in mmcv.track_iter_progress(infos):
@@ -313,7 +309,7 @@ def get_2d_boxes(image_id, info, cam_info, mono3d=True):
         record = {
             "bbox": [x1, y1, x2 - x1, y2 - y1],
             "category_name": name,
-            "category_id": ZenDataset.CLASSES.index(name),
+            "category_id": ALL_CLASSES.index(name),
             "area": (y2 - y1) * (x2 - x1),
             "file_name": cam_info["data_path"],
             "image_id": image_id,
@@ -322,7 +318,7 @@ def get_2d_boxes(image_id, info, cam_info, mono3d=True):
         }
 
         # If mono3d=True, add 3D annotations in camera coordinates
-        if mono3d and (record is not None):
+        if mono3d and (record is not None) and has_3d:
             # box is (x, y, z, l, w, h, yaw) in lidar coordinates
             # convert to camera coordinates
             box = box.copy()
