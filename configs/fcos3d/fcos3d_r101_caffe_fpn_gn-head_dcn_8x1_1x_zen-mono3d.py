@@ -77,13 +77,15 @@ data = dict(
     samples_per_gpu=8,
     workers_per_gpu=8,
     train=dict(
-        # times=50,
+        times=240,
         dataset=dict(
             pipeline=train_pipeline,
+            classes=class_names,
             ann_file='data/zod/mmdet3d/zen-single_infos_train_mono3d.coco.json',
             )),  # Train is a wrapped dataset
     val=dict(
         pipeline=test_pipeline,
+        classes=class_names,
         ann_file='data/zod/mmdet3d/zen-single_infos_val_mono3d.coco.json',
     ),
     test=dict(pipeline=test_pipeline))
