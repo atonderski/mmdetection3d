@@ -105,6 +105,7 @@ total_epochs = 12
 evaluation = dict(interval=2)
 
 log_config = dict(
+    interval=10,
     # interval=50,
     hooks=[
         dict(type='TextLoggerHook'),
