@@ -1,7 +1,7 @@
 dataset_type = 'ZenMonoDataset'
 data_root = 'data/zod/'
 class_names = [
-    'vehicle', 'vulnerable_vehicle', 'pedestrian'
+    'Vehicle', 'VulnerableVehicle', 'Pedestrian', 'TrafficSign', 'TrafficSignal'
 ]
 input_modality = dict(
     use_lidar=False,

@@ -3,7 +3,7 @@
 point_cloud_range = [-50, 0, -5, 50, 100, 3]
 # For nuScenes we usually do 10-class detection
 class_names = [
-    'vehicle', 'vulnerable-vehicle', 'pedestrian',
+    'Vehicle', 'VulnerableVehicle', 'Pedestrian', 'TrafficSign', 'TrafficSignal'
 ]
 dataset_type = 'ZenDataset'
 data_root = 'data/zod/'

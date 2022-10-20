@@ -7,11 +7,10 @@ import numpy as np
 import pyquaternion
 import torch
 from mmcv.utils import print_log
+from zod.utils.constants import EVALUATION_CLASSES
 
 from agp.zod.frames.evaluation.object_detection import DetectionBox, EvalBoxes
 from agp.zod.frames.evaluation.object_detection import evaluate as zod_eval
-from agp.zod.frames.evaluation.object_detection.utils import \
-    ZOD_NUSCENES_CLASS_MAPPING
 from mmdet3d.core.bbox.structures.utils import points_cam2img
 from mmdet3d.core.evaluation.kitti_utils.eval import kitti_eval
 from mmdet3d.datasets.nuscenes_mono_dataset import NuScenesMonoDataset
@@ -50,22 +49,12 @@ class ZenMonoDataset(NuScenesMonoDataset):
             Defaults to False.
         version (str, optional): Dataset version. Defaults to 'v1.0-trainval'.
     """
-    NameMapping = {
-        "Vehicle": "vehicle",
-        "VulnerableVehicle": "vulnerable_vehicle",
-        "Pedestrian": "pedestrian",
-    }
-    CLASSES = (
-        "vehicle",
-        "vulnerable_vehicle",
-        "pedestrian",
-    )
+    CLASSES = EVALUATION_CLASSES
     CLASSES_TO_KITTI = {
-        "vehicle": "Car",
-        "vulnerable_vehicle": "Cyclist",
-        "pedestrian": "Pedestrian",
+        "Vehicle": "Car",
+        "VulnerableVehicle": "Cyclist",
+        "Pedestrian": "Pedestrian",
     }
-    _REVERSE_NAME_MAPPING = {v: k for k, v in NameMapping.items()}
 
     def __init__(
         self,
@@ -110,8 +99,6 @@ class ZenMonoDataset(NuScenesMonoDataset):
         centers2d = []
         depths = []
         for i, ann in enumerate(ann_info):
-            if ann.get("ignore", False):
-                continue
             x1, y1, w, h = ann["bbox"]
             inter_w = max(0, min(x1 + w, img_info["width"]) - max(x1, 0))
             inter_h = max(0, min(y1 + h, img_info["height"]) - max(y1, 0))
@@ -122,7 +109,7 @@ class ZenMonoDataset(NuScenesMonoDataset):
             if ann["category_id"] not in self.cat_ids:
                 continue
             bbox = [x1, y1, x1 + w, y1 + h]
-            if ann.get("iscrowd", False):
+            if ann["iscrowd"] or not ann["has_3d"]:
                 gt_bboxes_ignore.append(bbox)
             else:
                 gt_bboxes.append(bbox)
@@ -273,15 +260,14 @@ class ZenMonoDataset(NuScenesMonoDataset):
         # quat = q2 * q1
 
         # ego translation is same as translation since world is ego-centered
-        zen_name = self._REVERSE_NAME_MAPPING[self.CLASSES[int(label)]]
-        nusc_name = ZOD_NUSCENES_CLASS_MAPPING[zen_name]
+        class_name = self.CLASSES[int(label)]
         box = DetectionBox(
             sample_token=frame_id,
             translation=tuple(box3d[:3]),
             size=tuple(box3d[3:6]),
             rotation=tuple(rot.elements),
             ego_translation=tuple(box3d[:3]),
-            detection_name=nusc_name,
+            detection_name=class_name,
             detection_score=float(score),
         )
         return box

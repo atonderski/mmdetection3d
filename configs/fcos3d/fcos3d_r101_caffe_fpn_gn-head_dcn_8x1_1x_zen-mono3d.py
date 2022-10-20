@@ -2,6 +2,9 @@ _base_ = [
     '../_base_/datasets/zen-mono3d.py', '../_base_/models/fcos3d.py',
     '../_base_/schedules/mmdet_schedule_1x.py', '../_base_/default_runtime.py'
 ]
+class_names = [
+    'Vehicle', 'VulnerableVehicle', 'Pedestrian', 'TrafficSign', 'TrafficSignal'
+]
 # model settings
 model = dict(
     backbone=dict(
@@ -10,7 +13,7 @@ model = dict(
     ),
     # default fcos3d head but without velocity and attributes
     bbox_head=dict(
-        num_classes=3,
+        num_classes=len(class_names),
         pred_attrs=False,
         pred_velo=False,
         group_reg_dims=(2, 1, 3, 1),  # offset, depth, size, rot
@@ -30,9 +33,6 @@ model = dict(
     ),
 )
 
-class_names = [
-    'vehicle', 'vulnerable_vehicle', 'pedestrian'
-]
 img_norm_cfg = dict(
     mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
 train_pipeline = [

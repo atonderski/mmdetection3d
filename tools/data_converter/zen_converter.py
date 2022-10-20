@@ -133,15 +133,14 @@ def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10, use_blur=True)
         ]
 
         # obtain annotation
-        annos = zod.read_dynamic_objects(frame_id)
-        # TODO: maybe relax this constraint in the future
-        annos = [a for a in annos if a.box3d is not None]
-        locs = np.array([b.box3d.center for b in annos]).reshape(-1, 3)
-        dims = np.array([b.box3d.size for b in annos]).reshape(-1, 3)
-        rots = np.array([b.box3d.orientation.yaw_pitch_roll[0] for b in annos]).reshape(
+        annos = zod.read_object_detection_annotation(frame_id)
+        locs = np.array([b.box3d.center if b.box3d else [-1,-1,-1] for b in annos]).reshape(-1, 3)
+        dims = np.array([b.box3d.size if b.box3d else [-1, -1, -1] for b in annos]).reshape(-1, 3)
+        rots = np.array([b.box3d.orientation.yaw_pitch_roll[0] if b.box3d else [-1] for b in annos]).reshape(
             -1, 1
         )
         gt_boxes = np.concatenate([locs, dims, rots], axis=1)
+        # TODO: maybe check number of lidar points
         # valid_flag = np.array(
         #     [
         #         (anno["num_lidar_pts"] + anno["num_radar_pts"]) > 0
@@ -149,15 +148,11 @@ def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10, use_blur=True)
         #     ],
         #     dtype=bool,
         # ).reshape(-1)
-        # TEMPORARY: valid always true
         valid_flag = np.ones(gt_boxes.shape[0], dtype=bool)
+        has_3d = np.array([a.box3d is not None for a in annos], dtype=bool)
+        is_ignore = np.array([a.should_ignore_object() for a in annos], dtype=bool)
 
         names = [b.name for b in annos]
-        for i in range(len(names)):
-            if names[i] in ZenDataset.NameMapping:
-                names[i] = ZenDataset.NameMapping[names[i]]
-            else:
-                print(names[i])
         names = np.array(names)
 
         assert len(gt_boxes) == len(annos), f"{len(gt_boxes)}, {len(annos)}"
@@ -166,6 +161,8 @@ def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10, use_blur=True)
         info["gt_boxes_2d"] = np.array([b.box2d.xyxy for b in annos]).reshape(-1, 4)
         # info["num_lidar_pts"] = np.array([a["num_lidar_pts"] for a in annotations])
         info["valid_flag"] = valid_flag
+        info["has_3d"] = has_3d
+        info["is_ignore"] = is_ignore
 
         infos.append(info)
 
@@ -308,8 +305,8 @@ def get_2d_boxes(image_id, info, cam_info, mono3d=True):
         cam_info["sensor2lidar_translation"], cam_info["sensor2lidar_rotation"]
     )
     assert len(info["gt_boxes"]) == len(info["gt_names"]) == len(info["gt_boxes_2d"])
-    for box, box2d, name in zip(
-        info["gt_boxes"], info["gt_boxes_2d"], info["gt_names"]
+    for box, box2d, name, has_3d, is_ignore in zip(
+        info["gt_boxes"], info["gt_boxes_2d"], info["gt_names"], info["has_3d"], info["is_ignore"]
     ):
         # Generate dictionary record to be included in the .json file.
         x1, y1, x2, y2 = box2d
@@ -320,7 +317,8 @@ def get_2d_boxes(image_id, info, cam_info, mono3d=True):
             "area": (y2 - y1) * (x2 - x1),
             "file_name": cam_info["data_path"],
             "image_id": image_id,
-            "iscrowd": 0,
+            "iscrowd": is_ignore,
+            "has_3d": has_3d,
         }
 
         # If mono3d=True, add 3D annotations in camera coordinates

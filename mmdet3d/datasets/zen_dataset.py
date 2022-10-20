@@ -6,11 +6,10 @@ import mmcv
 import numpy as np
 import pyquaternion
 from mmcv.utils import print_log
+from zod.utils.constants import EVALUATION_CLASSES
 
 from agp.zod.frames.evaluation.object_detection import DetectionBox, EvalBoxes
 from agp.zod.frames.evaluation.object_detection import evaluate as zod_eval
-from agp.zod.frames.evaluation.object_detection.utils import \
-    ZOD_NUSCENES_CLASS_MAPPING
 from ..core import show_result
 from ..core.bbox import Box3DMode, Coord3DMode, LiDARInstance3DBoxes
 from .builder import DATASETS
@@ -57,17 +56,7 @@ class ZenDataset(Custom3DDataset):
             in the info file as mask to filter gt_boxes and gt_names.
             Defaults to False.
     """
-    NameMapping = {
-        "Vehicle": "vehicle",
-        "VulnerableVehicle": "vulnerable_vehicle",
-        "Pedestrian": "pedestrian",
-    }
-    CLASSES = (
-        "vehicle",
-        "vulnerable_vehicle",
-        "pedestrian",
-    )
-    _REVERSE_NAME_MAPPING = {v: k for k, v in NameMapping.items()}
+    CLASSES = EVALUATION_CLASSES
 
     def __init__(
         self,
@@ -222,11 +211,10 @@ class ZenDataset(Custom3DDataset):
                 - gt_names (list[str]): Class names of ground truths.
         """
         info = self.data_infos[index]
-        # filter out bbox containing no points
+        # Always remove objects without 3d bounding boxes and ignore objects
+        mask = info["has_3d"] & (~info["is_ignore"])
         if self.use_valid_flag:
-            mask = info["valid_flag"]
-        else:
-            mask = np.ones_like(info["gt_names"], dtype=np.bool_)
+            mask &= info["valid_flag"]
         gt_bboxes_3d = info["gt_boxes"][mask]
         gt_names_3d = info["gt_names"][mask]
         gt_labels_3d = []
@@ -318,15 +306,14 @@ class ZenDataset(Custom3DDataset):
         rot = pyquaternion.Quaternion(axis=(0, 0, 1), radians=box3d[6:])
 
         # ego translation is same as translation since world is ego-centered
-        zen_name = self._REVERSE_NAME_MAPPING[self.CLASSES[int(label)]]
-        nusc_name = ZOD_NUSCENES_CLASS_MAPPING[zen_name]
+        class_name = self.CLASSES[int(label)]
         box = DetectionBox(
             sample_token=frame_id,
             translation=tuple(box3d[:3]),
             size=tuple(box3d[3:6]),
             rotation=tuple(rot.elements),
             ego_translation=tuple(box3d[:3]),
-            detection_name=nusc_name,
+            detection_name=class_name,
             detection_score=float(score),
         )
         return box
