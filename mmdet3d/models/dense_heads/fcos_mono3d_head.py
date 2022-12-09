@@ -643,7 +643,8 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             if rescale:
                 bbox_pred[:, :2] /= bbox_pred[:, :2].new_tensor(scale_factor)
             pred_center2d = bbox_pred[:, :3].clone()
-            bbox_pred[:, :3] = points_img2cam(bbox_pred[:, :3], view, input_meta)
+            bbox_pred[:, :3] = points_img2cam(bbox_pred[:, :3], view,
+                                              input_meta)
             mlvl_centers2d.append(pred_center2d)
             mlvl_bboxes.append(bbox_pred)
             mlvl_scores.append(scores)

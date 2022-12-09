@@ -17,7 +17,6 @@ class MMDet3DWandbHook(MMDetWandbHook):
 
     For more details, please refer to the parent documentation:
     :cls:`mmdetection.runner.MMDetWandbHook`
-
     """
 
     def _add_ground_truth(self, runner):
@@ -57,7 +56,7 @@ class MMDet3DWandbHook(MMDetWandbHook):
         for idx in self.eval_image_indexs:
             img_info = self.val_dataset.data_infos[idx]
             image_name = img_info.get('filename', f'img_{idx}')
-            img_height, img_width = img_info['height'], img_info['width']
+            # img_height, img_width = img_info['height'], img_info['width']
 
             img_meta = img_loader(
                 dict(img_info=img_info, img_prefix=img_prefix))
@@ -77,9 +76,7 @@ class MMDet3DWandbHook(MMDetWandbHook):
             self.data_table.add_data(
                 image_name,
                 self.wandb.Image(
-                    image,
-                    boxes=wandb_boxes,
-                    classes=self.class_set))
+                    image, boxes=wandb_boxes, classes=self.class_set))
 
     def _log_predictions(self, results):
         table_idxs = self.data_table_ref.get_index()
@@ -87,11 +84,11 @@ class MMDet3DWandbHook(MMDetWandbHook):
 
         for ndx, eval_image_index in enumerate(self.eval_image_indexs):
             # Get the result
-            current_results = results[eval_image_index]["img_bbox"]
+            current_results = results[eval_image_index]['img_bbox']
             img_info = self.val_dataset.data_infos[eval_image_index]
-            boxes_3d = current_results["boxes_3d"]
-            scores = current_results["scores_3d"]
-            labels = current_results["labels_3d"]
+            boxes_3d = current_results['boxes_3d']
+            scores = current_results['scores_3d']
+            labels = current_results['labels_3d']
 
             # Remove bounding boxes and masks with score lower than threshold.
             if self.bbox_score_thr > 0:
@@ -104,15 +101,19 @@ class MMDet3DWandbHook(MMDetWandbHook):
             # Project bbox to 2d
             box_corners_in_image = points_cam2img(
                 boxes_3d.corners,
-                proj_mat=img_info["cam_intrinsic"],
-                meta={"distortion": img_info["cam_distortion"], "proj_model": img_info["proj_model"]},
+                proj_mat=img_info['cam_intrinsic'],
+                meta={
+                    'distortion': img_info['cam_distortion'],
+                    'proj_model': img_info['proj_model']
+                },
             )
             minxy = torch.min(box_corners_in_image, dim=-2)[0]
             maxxy = torch.max(box_corners_in_image, dim=-2)[0]
             boxes_2d = torch.cat([minxy, maxxy, scores[:, None]], dim=-1)
 
             # Get dict of bounding boxes to be logged.
-            wandb_boxes = self._get_wandb_bboxes(boxes_2d, labels, log_gt=False)
+            wandb_boxes = self._get_wandb_bboxes(
+                boxes_2d, labels, log_gt=False)
 
             # Log a row to the eval table.
             self.eval_table.add_data(
@@ -121,8 +122,7 @@ class MMDet3DWandbHook(MMDetWandbHook):
                 self.wandb.Image(
                     self.data_table_ref.data[ndx][1],
                     boxes=wandb_boxes,
-                    classes=self.class_set
-            ))
+                    classes=self.class_set))
 
     def _get_wandb_bboxes(self, bboxes, labels, log_gt=True):
         """Get list of structured dict for logging bounding boxes to W&B.
@@ -186,4 +186,4 @@ class MMDet3DWandbHook(MMDetWandbHook):
         """
         super()._log_eval_table(idx)
         # log the first row of the eval table to the wandb run
-        self.wandb.log({"predictions": self.eval_table.data[0][2]})
+        self.wandb.log({'predictions': self.eval_table.data[0][2]})

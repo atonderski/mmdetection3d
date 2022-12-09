@@ -201,7 +201,12 @@ def waymo_data_prep(root_path,
     ).create()
 
 
-def zen_data_prep(root_path, info_prefix, version, out_dir, workers, max_sweeps=10):
+def zen_data_prep(root_path,
+                  info_prefix,
+                  version,
+                  out_dir,
+                  workers,
+                  max_sweeps=10):
     """Prepare data related to Zenseact Open Dataset.
 
     Related data consists of '.pkl' files recording basic infos,
@@ -217,20 +222,26 @@ def zen_data_prep(root_path, info_prefix, version, out_dir, workers, max_sweeps=
     """
     os.makedirs(out_dir, exist_ok=True)
     zen_converter.create_zen_infos(
-        root_path, out_dir, info_prefix, version=version, max_sweeps=max_sweeps
-    )
-    info_train_path = osp.join(out_dir, f"{info_prefix}_infos_train.pkl")
-    info_val_path = osp.join(out_dir, f"{info_prefix}_infos_val.pkl")
-    zen_converter.export_2d_annotation(root_path, info_train_path, version=version)
-    zen_converter.export_2d_annotation(root_path, info_val_path, version=version)
+        root_path,
+        out_dir,
+        info_prefix,
+        version=version,
+        max_sweeps=max_sweeps)
+    info_train_path = osp.join(out_dir, f'{info_prefix}_infos_train.pkl')
+    info_val_path = osp.join(out_dir, f'{info_prefix}_infos_val.pkl')
+    zen_converter.export_2d_annotation(
+        root_path, info_train_path, version=version)
+    zen_converter.export_2d_annotation(
+        root_path, info_val_path, version=version)
     GTDatabaseCreater(
-        "ZenDataset",
+        'ZenDataset',
         root_path,
         info_prefix,
-        f"{out_dir}/{info_prefix}_infos_train.pkl",
+        f'{out_dir}/{info_prefix}_infos_train.pkl',
         num_worker=workers,
         database_save_path=osp.join(out_dir, f'{info_prefix}_gt_database'),
-        db_info_save_path=osp.join(out_dir, f'{info_prefix}_db_infos_train.pkl'),
+        db_info_save_path=osp.join(out_dir,
+                                   f'{info_prefix}_db_infos_train.pkl'),
     ).create()
     # create_groundtruth_database(
     #     "ZenDataset",
@@ -354,7 +365,7 @@ if __name__ == '__main__':
             out_dir=args.out_dir,
             workers=args.workers,
         )
-    elif args.dataset == "zen":
+    elif args.dataset == 'zen':
         zen_data_prep(
             root_path=args.root_path,
             info_prefix=args.extra_tag,

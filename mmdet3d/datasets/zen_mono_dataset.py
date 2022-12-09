@@ -52,9 +52,9 @@ class ZenMonoDataset(NuScenesMonoDataset):
     """
     CLASSES = EVALUATION_CLASSES
     CLASSES_TO_KITTI = {
-        "Vehicle": "Car",
-        "VulnerableVehicle": "Cyclist",
-        "Pedestrian": "Pedestrian",
+        'Vehicle': 'Car',
+        'VulnerableVehicle': 'Cyclist',
+        'Pedestrian': 'Pedestrian',
     }
 
     def __init__(
@@ -64,7 +64,7 @@ class ZenMonoDataset(NuScenesMonoDataset):
         pipeline,
         load_interval=1,
         with_velocity=False,
-        eval_version="zen",
+        eval_version='zen',
         version=None,  # TODO: see if needed
         **kwargs,
     ):
@@ -90,7 +90,8 @@ class ZenMonoDataset(NuScenesMonoDataset):
 
         Returns:
             dict: A dict containing the following keys: bboxes, labels,
-                gt_bboxes_3d, gt_labels_3d, centers2d, depths, bboxes_ignore, masks, seg_map
+                gt_bboxes_3d, gt_labels_3d, centers2d, depths, bboxes_ignore,
+                masks, seg_map
         """
         gt_bboxes = []
         gt_labels = []
@@ -100,31 +101,32 @@ class ZenMonoDataset(NuScenesMonoDataset):
         centers2d = []
         depths = []
         for i, ann in enumerate(ann_info):
-            x1, y1, w, h = ann["bbox"]
-            inter_w = max(0, min(x1 + w, img_info["width"]) - max(x1, 0))
-            inter_h = max(0, min(y1 + h, img_info["height"]) - max(y1, 0))
+            x1, y1, w, h = ann['bbox']
+            inter_w = max(0, min(x1 + w, img_info['width']) - max(x1, 0))
+            inter_h = max(0, min(y1 + h, img_info['height']) - max(y1, 0))
             if inter_w * inter_h == 0:
                 continue
-            if ann["area"] <= 0 or w < 1 or h < 1:
+            if ann['area'] <= 0 or w < 1 or h < 1:
                 continue
-            if ann["category_id"] not in self.cat_ids:
+            if ann['category_id'] not in self.cat_ids:
                 continue
             bbox = [x1, y1, x1 + w, y1 + h]
-            if ann["iscrowd"] or not ann["has_3d"]:
+            if ann['iscrowd'] or not ann['has_3d']:
                 gt_bboxes_ignore.append(bbox)
             else:
                 gt_bboxes.append(bbox)
-                gt_labels.append(self.cat2label[ann["category_id"]])
+                gt_labels.append(self.cat2label[ann['category_id']])
                 gt_masks_ann.append(None)
                 # 3D annotations in camera coordinates
-                bbox_cam3d = np.array(ann["bbox_cam3d"]).reshape(1, -1)
+                bbox_cam3d = np.array(ann['bbox_cam3d']).reshape(1, -1)
                 # nan_mask = np.isnan(velo_cam3d[:, 0])
                 # velo_cam3d[nan_mask] = [0.0, 0.0]
-                # bbox_cam3d = np.concatenate([bbox_cam3d, velo_cam3d], axis=-1)
+                # bbox_cam3d = np.concatenate([bbox_cam3d, velo_cam3d],
+                #                             axis=-1)
                 gt_bboxes_cam3d.append(bbox_cam3d.squeeze())
                 # 2.5D annotations in camera coordinates
-                center2d = ann["center2d"][:2]
-                depth = ann["center2d"][2]
+                center2d = ann['center2d'][:2]
+                depth = ann['center2d'][2]
                 centers2d.append(center2d)
                 depths.append(depth)
 
@@ -140,13 +142,15 @@ class ZenMonoDataset(NuScenesMonoDataset):
             centers2d = np.array(centers2d, dtype=np.float32)
             depths = np.array(depths, dtype=np.float32)
         else:
-            gt_bboxes_cam3d = np.zeros((0, self.bbox_code_size), dtype=np.float32)
+            gt_bboxes_cam3d = np.zeros((0, self.bbox_code_size),
+                                       dtype=np.float32)
             centers2d = np.zeros((0, 2), dtype=np.float32)
             depths = np.zeros((0), dtype=np.float32)
 
         gt_bboxes_cam3d = CameraInstance3DBoxes(
-            gt_bboxes_cam3d, box_dim=gt_bboxes_cam3d.shape[-1], origin=(0.5, 0.5, 0.5)
-        )
+            gt_bboxes_cam3d,
+            box_dim=gt_bboxes_cam3d.shape[-1],
+            origin=(0.5, 0.5, 0.5))
         gt_labels_3d = copy.deepcopy(gt_labels)
 
         if gt_bboxes_ignore:
@@ -201,20 +205,22 @@ class ZenMonoDataset(NuScenesMonoDataset):
         Returns:
             dict[str, float]: Results of each evaluation metric.
         """
-        assert len(results[0]) == 1 and "img_bbox" in results[0], print(results[0])
-        results = [res["img_bbox"] for res in results]
+        assert len(results[0]) == 1 and 'img_bbox' in results[0], print(
+            results[0])
+        results = [res['img_bbox'] for res in results]
 
-        if self.eval_version == "kitti":
+        if self.eval_version == 'kitti':
             eval_results = self._evaluate_kitti(results, logger)
-        elif self.eval_version == "zen":
+        elif self.eval_version == 'zen':
             eval_results = self._evaluate_zen(results, logger)
         else:
-            raise ValueError("Unsupported eval_version: {}".format(self.eval_version))
+            raise ValueError('Unsupported eval_version: {}'.format(
+                self.eval_version))
         if show or out_dir:
             self.show(results, out_dir, show=show, pipeline=pipeline)
         return eval_results
 
-    #### Zen evaluation ####
+    # Zen evaluation
 
     def _evaluate_zen(self, results, logger) -> dict:
         """Evaluate in Zen protocol.
@@ -226,7 +232,7 @@ class ZenMonoDataset(NuScenesMonoDataset):
         """
         det_boxes, gt_boxes = EvalBoxes(), EvalBoxes()
         for idx, (det, info) in enumerate(zip(results, self.data_infos)):
-            frame_id = info["frame_id"]
+            frame_id = info['frame_id']
             det_boxes.add_boxes(frame_id, self._det_to_zen(det, frame_id))
             gt_boxes.add_boxes(frame_id, self._gt_to_zen(idx, frame_id))
 
@@ -237,9 +243,9 @@ class ZenMonoDataset(NuScenesMonoDataset):
     def _det_to_zen(self, det: dict, frame_id: str) -> List[DetectionBox]:
         dets = []
         for box3d, label, score in zip(
-            det["boxes_3d"].tensor.numpy(),
-            det["labels_3d"].numpy(),
-            det["scores_3d"].numpy(),
+                det['boxes_3d'].tensor.numpy(),
+                det['labels_3d'].numpy(),
+                det['scores_3d'].numpy(),
         ):
             dets.append(self._obj_to_zen(frame_id, box3d, label, score))
         return [det for det in dets if det is not None]
@@ -247,12 +253,17 @@ class ZenMonoDataset(NuScenesMonoDataset):
     def _gt_to_zen(self, idx: int, frame_id: str) -> List[DetectionBox]:
         anno: dict = self.get_ann_info(idx)
         gts = []
-        for box3d, label in zip(anno["gt_bboxes_3d"], anno["gt_labels_3d"]):
+        for box3d, label in zip(anno['gt_bboxes_3d'], anno['gt_labels_3d']):
             gts.append(self._obj_to_zen(frame_id, box3d, label))
         return [gt for gt in gts if gt is not None]
 
-    def _obj_to_zen(self, frame_id: str, box3d: np.ndarray, label: int, score: float = -1.0) -> Optional[DetectionBox]:
-        # object is in lidar frame - meaning that the rotation is around the y-axis
+    def _obj_to_zen(self,
+                    frame_id: str,
+                    box3d: np.ndarray,
+                    label: int,
+                    score: float = -1.0) -> Optional[DetectionBox]:
+        # object is in lidar frame - meaning that the rotation is
+        # around the y-axis
         # TODO: check if rotation should be negative
         rot = pyquaternion.Quaternion(axis=(0, 1, 0), radians=box3d[6:])
         # TODO: perhaps it should be like this (taken from the kitti code)
@@ -275,7 +286,7 @@ class ZenMonoDataset(NuScenesMonoDataset):
         )
         return box
 
-    #### KITTI evaluation ####
+    # KITTI evaluation
 
     def _evaluate_kitti(self, results, logger) -> dict:
         dt_annos = [
@@ -284,10 +295,13 @@ class ZenMonoDataset(NuScenesMonoDataset):
         ]
         gt_annos = [self.get_kitti_anno(idx) for idx in range(len(dt_annos))]
 
-        current_classes = tuple(self.CLASSES_TO_KITTI[cls] for cls in self.CLASSES if cls in self.CLASSES_TO_KITTI)
+        current_classes = tuple(self.CLASSES_TO_KITTI[cls]
+                                for cls in self.CLASSES
+                                if cls in self.CLASSES_TO_KITTI)
         ap_result_str, ap_dict = kitti_eval(
-            gt_annos=gt_annos, dt_annos=dt_annos, current_classes=current_classes
-        )
+            gt_annos=gt_annos,
+            dt_annos=dt_annos,
+            current_classes=current_classes)
         print_log(ap_result_str)
         return ap_dict
 
@@ -301,26 +315,27 @@ class ZenMonoDataset(NuScenesMonoDataset):
         """
         kitti_dict = defaultdict(list)
 
-        if len(pred["scores_3d"]) > 0:
-            boxes_3d = pred["boxes_3d"]
+        if len(pred['scores_3d']) > 0:
+            boxes_3d = pred['boxes_3d']
             image_shape = boxes_3d.tensor.new_tensor(
-                (info["height"], info["width"])
-            ).numpy()
+                (info['height'], info['width'])).numpy()
             box_corners_in_image = points_cam2img(
                 boxes_3d.corners,
-                proj_mat=info["cam_intrinsic"],
-                meta={"distortion": info["cam_distortion"],
-                      "proj_model": info["proj_model"]},
+                proj_mat=info['cam_intrinsic'],
+                meta={
+                    'distortion': info['cam_distortion'],
+                    'proj_model': info['proj_model']
+                },
             )
             minxy = torch.min(box_corners_in_image, dim=-2)[0]
             maxxy = torch.max(box_corners_in_image, dim=-2)[0]
             boxes_2d = torch.cat([minxy, maxxy], dim=-1)
 
             for box2d, box3d, label, score in zip(
-                boxes_2d.numpy(),
-                boxes_3d.tensor.numpy(),
-                pred["labels_3d"].numpy(),
-                pred["scores_3d"].numpy(),
+                    boxes_2d.numpy(),
+                    boxes_3d.tensor.numpy(),
+                    pred['labels_3d'].numpy(),
+                    pred['scores_3d'].numpy(),
             ):
                 # Post-processing - clip to image boundaries, and discard
                 # check box_preds_camera
@@ -332,15 +347,16 @@ class ZenMonoDataset(NuScenesMonoDataset):
                 if zen_name not in self.CLASSES_TO_KITTI:
                     continue
                 kitti_name = self.CLASSES_TO_KITTI[zen_name]
-                kitti_dict["name"].append(kitti_name)
-                kitti_dict["truncated"].append(0.0)
-                kitti_dict["occluded"].append(0)
-                kitti_dict["alpha"].append(-np.arctan2(box3d[0], box3d[2]) + box3d[6])
-                kitti_dict["bbox"].append(box2d)
-                kitti_dict["dimensions"].append(box3d[3:6])
-                kitti_dict["location"].append(box3d[:3])
-                kitti_dict["rotation_y"].append(box3d[6])
-                kitti_dict["score"].append(score)
+                kitti_dict['name'].append(kitti_name)
+                kitti_dict['truncated'].append(0.0)
+                kitti_dict['occluded'].append(0)
+                kitti_dict['alpha'].append(-np.arctan2(box3d[0], box3d[2]) +
+                                           box3d[6])
+                kitti_dict['bbox'].append(box2d)
+                kitti_dict['dimensions'].append(box3d[3:6])
+                kitti_dict['location'].append(box3d[:3])
+                kitti_dict['rotation_y'].append(box3d[6])
+                kitti_dict['score'].append(score)
 
         if kitti_dict:
             return {k: np.stack(v) for k, v in kitti_dict.items()}
@@ -350,30 +366,27 @@ class ZenMonoDataset(NuScenesMonoDataset):
     def get_kitti_anno(self, idx: int):
         anno: dict = self.get_ann_info(idx)
         kitti_dict = defaultdict(list)
-        for box3d, box2d, label in zip(
-            anno["gt_bboxes_3d"], anno["bboxes"], anno["gt_labels_3d"]
-        ):
-            box2d_xyxy = np.array(
-                [
-                    box2d[0],
-                    box2d[1],
-                    box2d[0] + box2d[2],
-                    box2d[1] + box2d[3],
-                ]
-            )
+        for box3d, box2d, label in zip(anno['gt_bboxes_3d'], anno['bboxes'],
+                                       anno['gt_labels_3d']):
+            box2d_xyxy = np.array([
+                box2d[0],
+                box2d[1],
+                box2d[0] + box2d[2],
+                box2d[1] + box2d[3],
+            ])
             zen_name = self.CLASSES[int(label)]
             if zen_name not in self.CLASSES_TO_KITTI:
                 continue
             kitti_name = self.CLASSES_TO_KITTI[zen_name]
             alpha = np.arctan(-np.arctan2(box3d[0], box3d[2]) + box3d[6])
-            kitti_dict["bbox"].append(box2d_xyxy)
-            kitti_dict["location"].append(box3d[:3])
-            kitti_dict["dimensions"].append(box3d[3:6])
-            kitti_dict["rotation_y"].append(box3d[6])
-            kitti_dict["alpha"].append(alpha)
-            kitti_dict["name"].append(kitti_name)
-            kitti_dict["truncated"].append(0.0)
-            kitti_dict["occluded"].append(0)
+            kitti_dict['bbox'].append(box2d_xyxy)
+            kitti_dict['location'].append(box3d[:3])
+            kitti_dict['dimensions'].append(box3d[3:6])
+            kitti_dict['rotation_y'].append(box3d[6])
+            kitti_dict['alpha'].append(alpha)
+            kitti_dict['name'].append(kitti_name)
+            kitti_dict['truncated'].append(0.0)
+            kitti_dict['occluded'].append(0)
 
         if kitti_dict:
             return {k: np.stack(v) for k, v in kitti_dict.items()}
@@ -383,15 +396,15 @@ class ZenMonoDataset(NuScenesMonoDataset):
 
 def _empty_kitti_dict(with_score: bool):
     kitti_dict = {
-        "name": np.array([]),
-        "truncated": np.array([]),
-        "occluded": np.array([]),
-        "alpha": np.array([]),
-        "bbox": np.zeros([0, 4]),
-        "dimensions": np.zeros([0, 3]),
-        "location": np.zeros([0, 3]),
-        "rotation_y": np.array([]),
+        'name': np.array([]),
+        'truncated': np.array([]),
+        'occluded': np.array([]),
+        'alpha': np.array([]),
+        'bbox': np.zeros([0, 4]),
+        'dimensions': np.zeros([0, 3]),
+        'location': np.zeros([0, 3]),
+        'rotation_y': np.array([]),
     }
     if with_score:
-        kitti_dict["score"] = np.array([])
+        kitti_dict['score'] = np.array([])
     return kitti_dict

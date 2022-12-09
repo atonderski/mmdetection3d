@@ -1,7 +1,8 @@
 dataset_type = 'ZenMonoDataset'
 data_root = 'data/zod/'
 class_names = [
-    'Vehicle', 'VulnerableVehicle', 'Pedestrian', 'TrafficSign', 'TrafficSignal'
+    'Vehicle', 'VulnerableVehicle', 'Pedestrian', 'TrafficSign',
+    'TrafficSignal'
 ]
 input_modality = dict(
     use_lidar=False,
@@ -29,7 +30,8 @@ train_pipeline = [
     dict(
         type='Collect3D',
         keys=[
-            'img', 'gt_bboxes', 'gt_labels', 'gt_bboxes_3d', 'gt_labels_3d', 'centers2d', 'depths'
+            'img', 'gt_bboxes', 'gt_labels', 'gt_bboxes_3d', 'gt_labels_3d',
+            'centers2d', 'depths'
         ]),
 ]
 test_pipeline = [

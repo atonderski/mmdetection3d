@@ -95,7 +95,8 @@ class LoadImageFromFileMono3D(LoadImageFromFile):
         results['cam2img'] = results['img_info']['cam_intrinsic']
         results['distortion'] = results['img_info'].get('cam_distortion')
         results['undistortion'] = results['img_info'].get('cam_undistortion')
-        results['proj_model'] = results['img_info'].get('proj_model', 'pinhole')
+        results['proj_model'] = results['img_info'].get(
+            'proj_model', 'pinhole')
         return results
 
 
@@ -706,28 +707,31 @@ def _zen_load_points(pts_filename, load_dim):
         np.ndarray: An array containing point clouds data.
     """
     # points is a structured array with dtypes:
-    # [('timestamp', '<i4'), ('x', '<f4'), ('y', '<f4'), ('z', '<f4'), ('intensity', 'u1'), ('diode_index', 'u1')]
+    # [('timestamp', '<i4'), ('x', '<f4'), ('y', '<f4'), ('z', '<f4'),
+    #  ('intensity', 'u1'), ('diode_index', 'u1')]
     if load_dim < 3 or load_dim > 6:
-        raise NotImplementedError("Only support loading 3-6 dimensions")
+        raise NotImplementedError('Only support loading 3-6 dimensions')
     points = np.load(pts_filename)
-    fields_to_load = [points["x"], points["y"], points["z"]]
+    fields_to_load = [points['x'], points['y'], points['z']]
     if load_dim >= 4:
-        fields_to_load.append(points["intensity"].astype(np.float32))
+        fields_to_load.append(points['intensity'].astype(np.float32))
     if load_dim >= 5:
-        fields_to_load.append(points["diode_index"].astype(np.float32))
+        fields_to_load.append(points['diode_index'].astype(np.float32))
     if load_dim >= 6:
-        fields_to_load.append(points["timestamp"].astype(np.float32))
+        fields_to_load.append(points['timestamp'].astype(np.float32))
     points = np.stack(fields_to_load, axis=1)
     return points
 
 
 @PIPELINES.register_module()
 class ZenLoadPointsFromFile(LoadPointsFromFile):
+
     def _load_points(self, pts_filename):
         return _zen_load_points(pts_filename, self.load_dim)
 
 
 @PIPELINES.register_module()
 class ZenLoadPointsFromMultiSweeps(LoadPointsFromMultiSweeps):
+
     def _load_points(self, pts_filename):
         return _zen_load_points(pts_filename, self.load_dim)

@@ -66,10 +66,10 @@ class ZenDataset(Custom3DDataset):
         classes=None,
         load_interval=1,
         modality=None,
-        box_type_3d="LiDAR",
+        box_type_3d='LiDAR',
         filter_empty_gt=True,
         test_mode=False,
-        eval_version="detection_cvpr_2019",
+        eval_version='detection_cvpr_2019',
         use_valid_flag=True,
     ):
         self.load_interval = load_interval
@@ -111,10 +111,10 @@ class ZenDataset(Custom3DDataset):
         """
         info = self.data_infos[idx]
         if self.use_valid_flag:
-            mask = info["valid_flag"]
-            gt_names = set(info["gt_names"][mask])
+            mask = info['valid_flag']
+            gt_names = set(info['gt_names'][mask])
         else:
-            gt_names = set(info["gt_names"])
+            gt_names = set(info['gt_names'])
 
         cat_ids = []
         for name in gt_names:
@@ -131,11 +131,11 @@ class ZenDataset(Custom3DDataset):
         Returns:
             list[dict]: List of annotations sorted by timestamps.
         """
-        data = mmcv.load(ann_file, file_format="pkl")
-        data_infos = list(sorted(data["infos"], key=lambda e: e["timestamp"]))
-        data_infos = data_infos[:: self.load_interval]
-        self.metadata = data["metadata"]
-        self.version = self.metadata["version"]
+        data = mmcv.load(ann_file, file_format='pkl')
+        data_infos = list(sorted(data['infos'], key=lambda e: e['timestamp']))
+        data_infos = data_infos[::self.load_interval]
+        self.metadata = data['metadata']
+        self.version = self.metadata['version']
         return data_infos
 
     def get_data_info(self, index):
@@ -161,25 +161,26 @@ class ZenDataset(Custom3DDataset):
         # standard protocol modified from SECOND.Pytorch
         input_dict = dict(
             sample_idx=info['frame_id'],
-            pts_filename=info["lidar_path"],
-            sweeps=info["sweeps"],
-            timestamp=info["timestamp"] / 1e6,
+            pts_filename=info['lidar_path'],
+            sweeps=info['sweeps'],
+            timestamp=info['timestamp'] / 1e6,
         )
 
-        if self.modality["use_camera"]:
+        if self.modality['use_camera']:
             image_paths = []
             lidar2img_rts = []
-            for cam_type, cam_info in info["cams"].items():
-                image_paths.append(cam_info["data_path"])
+            for cam_type, cam_info in info['cams'].items():
+                image_paths.append(cam_info['data_path'])
                 # obtain lidar to image transformation matrix
-                lidar2cam_r = np.linalg.inv(cam_info["sensor2lidar_rotation"])
-                lidar2cam_t = cam_info["sensor2lidar_translation"] @ lidar2cam_r.T
+                lidar2cam_r = np.linalg.inv(cam_info['sensor2lidar_rotation'])
+                lidar2cam_t = cam_info[
+                    'sensor2lidar_translation'] @ lidar2cam_r.T
                 lidar2cam_rt = np.eye(4)
                 lidar2cam_rt[:3, :3] = lidar2cam_r.T
                 lidar2cam_rt[3, :3] = -lidar2cam_t
-                intrinsic = cam_info["cam_intrinsic"]
+                intrinsic = cam_info['cam_intrinsic']
                 viewpad = np.eye(4)
-                viewpad[: intrinsic.shape[0], : intrinsic.shape[1]] = intrinsic
+                viewpad[:intrinsic.shape[0], :intrinsic.shape[1]] = intrinsic
                 lidar2img_rt = viewpad @ lidar2cam_rt.T
                 lidar2img_rts.append(lidar2img_rt)
 
@@ -187,12 +188,11 @@ class ZenDataset(Custom3DDataset):
                 dict(
                     img_filename=image_paths,
                     lidar2img=lidar2img_rts,
-                )
-            )
+                ))
 
         if not self.test_mode:
             annos = self.get_ann_info(index)
-            input_dict["ann_info"] = annos
+            input_dict['ann_info'] = annos
 
         return input_dict
 
@@ -212,11 +212,11 @@ class ZenDataset(Custom3DDataset):
         """
         info = self.data_infos[index]
         # Always remove objects without 3d bounding boxes and ignore objects
-        mask = info["has_3d"] & (~info["is_ignore"])
+        mask = info['has_3d'] & (~info['is_ignore'])
         if self.use_valid_flag:
-            mask &= info["valid_flag"]
-        gt_bboxes_3d = info["gt_boxes"][mask]
-        gt_names_3d = info["gt_names"][mask]
+            mask &= info['valid_flag']
+        gt_bboxes_3d = info['gt_boxes'][mask]
+        gt_names_3d = info['gt_names'][mask]
         gt_labels_3d = []
         for cat in gt_names_3d:
             if cat in self.CLASSES:
@@ -228,21 +228,23 @@ class ZenDataset(Custom3DDataset):
         # the nuscenes box center is [0.5, 0.5, 0.5], we change it to be
         # the same as KITTI (0.5, 0.5, 0)
         gt_bboxes_3d = LiDARInstance3DBoxes(
-            gt_bboxes_3d, box_dim=gt_bboxes_3d.shape[-1], origin=(0.5, 0.5, 0.5)
-        ).convert_to(self.box_mode_3d)
+            gt_bboxes_3d,
+            box_dim=gt_bboxes_3d.shape[-1],
+            origin=(0.5, 0.5, 0.5)).convert_to(self.box_mode_3d)
 
         anns_results = dict(
-            gt_bboxes_3d=gt_bboxes_3d, gt_labels_3d=gt_labels_3d, gt_names=gt_names_3d
-        )
+            gt_bboxes_3d=gt_bboxes_3d,
+            gt_labels_3d=gt_labels_3d,
+            gt_names=gt_names_3d)
         return anns_results
 
     def evaluate(
         self,
         results,
-        metric="bbox",
+        metric='bbox',
         logger=None,
         jsonfile_prefix=None,
-        result_names=["pts_bbox"],
+        result_names=['pts_bbox'],
         show=False,
         out_dir=None,
         pipeline=None,
@@ -268,12 +270,13 @@ class ZenDataset(Custom3DDataset):
         Returns:
             dict[str, float]: Results of each evaluation metric.
         """
-        assert len(results[0]) == 1 and "pts_bbox" in results[0], print(results[0])
-        results = [res["pts_bbox"] for res in results]
+        assert len(results[0]) == 1 and 'pts_bbox' in results[0], print(
+            results[0])
+        results = [res['pts_bbox'] for res in results]
 
         det_boxes, gt_boxes = EvalBoxes(), EvalBoxes()
         for idx, (det, info) in enumerate(zip(results, self.data_infos)):
-            frame_id = info["frame_id"]
+            frame_id = info['frame_id']
             det_boxes.add_boxes(frame_id, self._det_to_zen(det, frame_id))
             gt_boxes.add_boxes(frame_id, self._gt_to_zen(idx, frame_id))
 
@@ -287,9 +290,9 @@ class ZenDataset(Custom3DDataset):
     def _det_to_zen(self, det: dict, frame_id: str) -> List[DetectionBox]:
         dets = []
         for box3d, label, score in zip(
-            det["boxes_3d"].tensor.numpy(),
-            det["labels_3d"].numpy(),
-            det["scores_3d"].numpy(),
+                det['boxes_3d'].tensor.numpy(),
+                det['labels_3d'].numpy(),
+                det['scores_3d'].numpy(),
         ):
             dets.append(self._obj_to_zen(frame_id, box3d, label, score))
         return dets
@@ -297,12 +300,17 @@ class ZenDataset(Custom3DDataset):
     def _gt_to_zen(self, idx: int, frame_id: str) -> List[DetectionBox]:
         anno: dict = self.get_ann_info(idx)
         gts = []
-        for box3d, label in zip(anno["gt_bboxes_3d"], anno["gt_labels_3d"]):
+        for box3d, label in zip(anno['gt_bboxes_3d'], anno['gt_labels_3d']):
             gts.append(self._obj_to_zen(frame_id, box3d, label))
         return gts
 
-    def _obj_to_zen(self, frame_id: str, box3d: np.ndarray, label: int, score: float = -1.0) -> DetectionBox:
-        # object is in lidar frame - meaning that the rotation is around the z-axis
+    def _obj_to_zen(self,
+                    frame_id: str,
+                    box3d: np.ndarray,
+                    label: int,
+                    score: float = -1.0) -> DetectionBox:
+        # object is in lidar frame - meaning that the rotation is around
+        # the z-axis
         rot = pyquaternion.Quaternion(axis=(0, 0, 1), radians=box3d[6:])
 
         # ego translation is same as translation since world is ego-centered
@@ -318,28 +326,28 @@ class ZenDataset(Custom3DDataset):
         )
         return box
 
-
-    #### END Zen evaluation ####
+    # END Zen evaluation
 
     def _build_default_pipeline(self):
         """Build the default pipeline for this dataset."""
         pipeline = [
             dict(
-                type="LoadPointsFromFile",
-                coord_type="LIDAR",
+                type='LoadPointsFromFile',
+                coord_type='LIDAR',
                 load_dim=5,
                 use_dim=5,
-                file_client_args=dict(backend="disk"),
+                file_client_args=dict(backend='disk'),
             ),
             dict(
-                type="LoadPointsFromMultiSweeps",
+                type='LoadPointsFromMultiSweeps',
                 sweeps_num=10,
-                file_client_args=dict(backend="disk"),
+                file_client_args=dict(backend='disk'),
             ),
             dict(
-                type="DefaultFormatBundle3D", class_names=self.CLASSES, with_label=False
-            ),
-            dict(type="Collect3D", keys=["points"]),
+                type='DefaultFormatBundle3D',
+                class_names=self.CLASSES,
+                with_label=False),
+            dict(type='Collect3D', keys=['points']),
         ]
         return Compose(pipeline)
 
@@ -354,31 +362,27 @@ class ZenDataset(Custom3DDataset):
             pipeline (list[dict], optional): raw data loading for showing.
                 Default: None.
         """
-        assert out_dir is not None, "Expect out_dir, got none."
+        assert out_dir is not None, 'Expect out_dir, got none.'
         pipeline = self._get_pipeline(pipeline)
         for i, result in enumerate(results):
-            if "pts_bbox" in result.keys():
-                result = result["pts_bbox"]
+            if 'pts_bbox' in result.keys():
+                result = result['pts_bbox']
             data_info = self.data_infos[i]
-            pts_path = data_info["lidar_path"]
-            file_name = osp.split(pts_path)[-1].split(".")[0]
-            points = self._extract_data(i, pipeline, "points").numpy()
+            pts_path = data_info['lidar_path']
+            file_name = osp.split(pts_path)[-1].split('.')[0]
+            points = self._extract_data(i, pipeline, 'points').numpy()
             # for now we convert points into depth mode
-            points = Coord3DMode.convert_point(
-                points, Coord3DMode.LIDAR, Coord3DMode.DEPTH
-            )
-            inds = result["scores_3d"] > 0.1
-            gt_bboxes = self.get_ann_info(i)["gt_bboxes_3d"].tensor.numpy()
-            show_gt_bboxes = Box3DMode.convert(
-                gt_bboxes, Box3DMode.LIDAR, Box3DMode.DEPTH
-            )
-            pred_bboxes = result["boxes_3d"][inds].tensor.numpy()
-            show_pred_bboxes = Box3DMode.convert(
-                pred_bboxes, Box3DMode.LIDAR, Box3DMode.DEPTH
-            )
-            show_result(
-                points, show_gt_bboxes, show_pred_bboxes, out_dir, file_name, show
-            )
+            points = Coord3DMode.convert_point(points, Coord3DMode.LIDAR,
+                                               Coord3DMode.DEPTH)
+            inds = result['scores_3d'] > 0.1
+            gt_bboxes = self.get_ann_info(i)['gt_bboxes_3d'].tensor.numpy()
+            show_gt_bboxes = Box3DMode.convert(gt_bboxes, Box3DMode.LIDAR,
+                                               Box3DMode.DEPTH)
+            pred_bboxes = result['boxes_3d'][inds].tensor.numpy()
+            show_pred_bboxes = Box3DMode.convert(pred_bboxes, Box3DMode.LIDAR,
+                                                 Box3DMode.DEPTH)
+            show_result(points, show_gt_bboxes, show_pred_bboxes, out_dir,
+                        file_name, show)
 
 
 def flatten_dict(d):
@@ -387,8 +391,8 @@ def flatten_dict(d):
     for key, value in d.items():
         if isinstance(value, dict):
             result.update(
-                {key + "/" + k: v for k, v in flatten_dict(value).items()}
-            )
+                {key + '/' + k: v
+                 for k, v in flatten_dict(value).items()})
         else:
             result[key] = value
     return result

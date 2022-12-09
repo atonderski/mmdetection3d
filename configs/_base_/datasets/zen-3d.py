@@ -3,7 +3,8 @@
 point_cloud_range = [-50, 0, -5, 50, 100, 3]
 # For nuScenes we usually do 10-class detection
 class_names = [
-    'Vehicle', 'VulnerableVehicle', 'Pedestrian', 'TrafficSign', 'TrafficSignal'
+    'Vehicle', 'VulnerableVehicle', 'Pedestrian', 'TrafficSign',
+    'TrafficSignal'
 ]
 dataset_type = 'ZenDataset'
 data_root = 'data/zod/'
@@ -42,7 +43,8 @@ train_pipeline = [
         rot_range=[-0.3925, 0.3925],
         scale_ratio_range=[0.95, 1.05],
         translation_std=[0, 0, 0]),
-    dict(type='RandomFlip3D', flip_ratio_bev_vertical=0.5, sync_2d=False),  # vertical here means left-right in the image due to x-right lidar frame
+    dict(type='RandomFlip3D', flip_ratio_bev_vertical=0.5, sync_2d=False
+         ),  # vertical here means left-right in the image (x=right in lidar)
     dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectNameFilter', classes=class_names),

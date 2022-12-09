@@ -157,25 +157,23 @@ def get_box_type(box_type):
                               DepthInstance3DBoxes, LiDARInstance3DBoxes)
 
     box_type_lower = box_type.lower()
-    if box_type_lower == "lidar":
+    if box_type_lower == 'lidar':
         box_type_3d = LiDARInstance3DBoxes
         box_mode_3d = Box3DMode.LIDAR
-    elif box_type_lower == "camera":
+    elif box_type_lower == 'camera':
         box_type_3d = CameraInstance3DBoxes
         box_mode_3d = Box3DMode.CAM
-    elif box_type_lower == "depth":
+    elif box_type_lower == 'depth':
         box_type_3d = DepthInstance3DBoxes
         box_mode_3d = Box3DMode.DEPTH
     else:
-        raise ValueError(
-            'Only "box_type" of "camera", "lidar", "depth"'
-            f" are supported, got {box_type}"
-        )
+        raise ValueError('Only "box_type" of "camera", "lidar", "depth"'
+                         f' are supported, got {box_type}')
 
     return box_type_3d, box_mode_3d
 
 
-@array_converter(apply_to=("points_3d", "proj_mat"))
+@array_converter(apply_to=('points_3d', 'proj_mat'))
 def points_cam2img(points_3d, proj_mat, with_depth=False, meta=None):
     """Project points in camera coordinates to image coordinates.
 
@@ -196,15 +194,15 @@ def points_cam2img(points_3d, proj_mat, with_depth=False, meta=None):
     points_shape[-1] = 1
 
     assert len(proj_mat.shape) == 2, (
-        "The dimension of the projection"
-        f" matrix should be 2 instead of {len(proj_mat.shape)}."
-    )
+        'The dimension of the projection'
+        f' matrix should be 2 instead of {len(proj_mat.shape)}.')
     d1, d2 = proj_mat.shape[:2]
-    assert (d1 == 3 and d2 == 3) or (d1 == 3 and d2 == 4) or (d1 == 4 and d2 == 4), (
-        "The shape of the projection matrix" f" ({d1}*{d2}) is not supported."
-    )
+    assert (d1 == 3 and d2 == 3) or (d1 == 3 and d2 == 4) or (
+        d1 == 4 and d2 == 4), ('The shape of the projection matrix'
+                               f' ({d1}*{d2}) is not supported.')
     if d1 == 3:
-        proj_mat_expanded = torch.eye(4, device=proj_mat.device, dtype=proj_mat.dtype)
+        proj_mat_expanded = torch.eye(
+            4, device=proj_mat.device, dtype=proj_mat.dtype)
         proj_mat_expanded[:d1, :d2] = proj_mat
         proj_mat = proj_mat_expanded
 
@@ -212,17 +210,18 @@ def points_cam2img(points_3d, proj_mat, with_depth=False, meta=None):
     points_4 = torch.cat([points_3d, points_3d.new_ones(points_shape)], dim=-1)
 
     meta = meta or {}
-    proj_model = meta.get("proj_model", "pinhole")
+    proj_model = meta.get('proj_model', 'pinhole')
 
-    if proj_model == "pinhole":
+    if proj_model == 'pinhole':
         point_2d = points_4 @ proj_mat.T
         point_2d_res = point_2d[..., :2] / point_2d[..., 2:3]
-    elif proj_model == "kannala":
-        assert "distortion" in meta, "Kanna model requires distortion parameters"
+    elif proj_model == 'kannala':
+        assert 'distortion' in meta, 'Kanna model requires distort params'
         point_2d = _cam2img_kannala(points_4, proj_mat, meta['distortion'])
         point_2d_res = point_2d[..., :2]
     else:
-        raise NotImplementedError("Only pinhole and kannala models are supported")
+        raise NotImplementedError(
+            'Only pinhole and kannala models are supported')
 
     if with_depth:
         point_2d_res = torch.cat([point_2d_res, point_2d[..., 2:3]], dim=-1)
@@ -230,20 +229,20 @@ def points_cam2img(points_3d, proj_mat, with_depth=False, meta=None):
     return point_2d_res
 
 
-@array_converter(apply_to=("distortion", ), recover=False)
+@array_converter(apply_to=('distortion', ), recover=False)
 def _cam2img_kannala(data, camera_matrix, distortion):
     """Project data from 3d coordinates to image plane using the Kanala model.
-    Ref: J. Kannala and S. S. Brandt, "A generic camera model and calibration method for
-    conventional, wide-angle, and fish-eye lenses," in IEEE Transactions on Pattern Analysis and
-    Machine Intelligence, vol. 28, no. 8, pp. 1335-1340, Aug. 2006, doi: 10.1109/TPAMI.2006.153.
+    Ref: J. Kannala and S. S. Brandt, "A generic camera model and calibration
+    method for conventional, wide-angle, and fish-eye lenses,"
+    in IEEE Transactionson Pattern Analysis and Machine Intelligence,
+    vol. 28, no. 8, pp. 1335-1340, Aug. 2006, doi: 10.1109/TPAMI.2006.153.
 
-    Note that we return distance (in 3d) rather than depth (z), since that is the quantity that is
-    needed to perform unprojection.
+    Note that we return distance (in 3d) rather than depth (z), since that is
+    the quantity that is needed to perform unprojection.
     """
-    assert (
-        distortion is not None
-    ), "distortion must be provided for kannala projection model"
-    assert distortion.shape == (4,), "distortion should have 4 elements"
+    assert (distortion is not None
+            ), 'distortion must be provided for kannala projection model'
+    assert distortion.shape == (4, ), 'distortion should have 4 elements'
     norm_data = torch.norm(data[..., :2], dim=-1)
     radial = torch.atan2(norm_data, data[..., 2])
     radial2 = radial**2
@@ -251,12 +250,8 @@ def _cam2img_kannala(data, camera_matrix, distortion):
     radial6 = radial2 * radial4
     radial8 = radial4**2
     distortion_angle = radial * (
-        1
-        + distortion[0] * radial2
-        + distortion[1] * radial4
-        + distortion[2] * radial6
-        + distortion[3] * radial8
-    )
+        1 + distortion[0] * radial2 + distortion[1] * radial4 +
+        distortion[2] * radial6 + distortion[3] * radial8)
     u_dist = distortion_angle * (data[..., 0] / norm_data)
     v_dist = distortion_angle * (data[..., 1] / norm_data)
     pos_u = camera_matrix[0, 0] * u_dist + camera_matrix[0, 2]
@@ -267,7 +262,7 @@ def _cam2img_kannala(data, camera_matrix, distortion):
     return torch.stack((pos_u, pos_v, dists), -1)
 
 
-@array_converter(apply_to=("points", "cam2img"))
+@array_converter(apply_to=('points', 'cam2img'))
 def points_img2cam(points, cam2img, meta=None):
     """Project points in image coordinates to camera coordinates.
 
@@ -288,31 +283,33 @@ def points_img2cam(points, cam2img, meta=None):
     assert points.shape[1] == 3
 
     meta = meta or {}
-    proj_model = meta.get("proj_model", "pinhole")
+    proj_model = meta.get('proj_model', 'pinhole')
 
-    if proj_model == "pinhole":
+    if proj_model == 'pinhole':
         xys = points[:, :2]
         depths = points[:, 2].view(-1, 1)
         unnormed_xys = torch.cat([xys * depths, depths], dim=1)
         # Do operation in homogeneous coordinates.
         pad_cam2img = torch.eye(4, dtype=xys.dtype, device=xys.device)
-        pad_cam2img[: cam2img.shape[0], : cam2img.shape[1]] = cam2img
+        pad_cam2img[:cam2img.shape[0], :cam2img.shape[1]] = cam2img
         inv_pad_cam2img = torch.inverse(pad_cam2img).transpose(0, 1)
         num_points = unnormed_xys.shape[0]
-        homo_xys = torch.cat([unnormed_xys, xys.new_ones((num_points, 1))], dim=1)
+        homo_xys = torch.cat(
+            [unnormed_xys, xys.new_ones((num_points, 1))], dim=1)
         points3D = torch.mm(homo_xys, inv_pad_cam2img)
-    elif proj_model == "kannala":
-        assert "undistortion" in meta, "Kanna model requires undistortion parameters"
-        points3D = _img2cam_kannala(points, cam2img, meta["undistortion"])
+    elif proj_model == 'kannala':
+        assert 'undistortion' in meta, 'Kanna model requires undist params'
+        points3D = _img2cam_kannala(points, cam2img, meta['undistortion'])
     else:
-        raise NotImplementedError("Only pinhole and kannala models are supported")
+        raise NotImplementedError(
+            'Only pinhole and kannala models are supported')
 
     return points3D[:, :3]
 
 
-@array_converter(apply_to=("undistortion",), recover=False)
+@array_converter(apply_to=('undistortion', ), recover=False)
 def _img2cam_kannala(points, camera_matrix, undistortion):
-    """Unproject points from image coordinates to 3D. """
+    """Unproject points from image coordinates to 3D."""
     dists = points[..., 2]
     pixel_x, pixel_y = (points[:, 0], points[:, 1])
     focal_x, focal_y = (camera_matrix[0, 0], camera_matrix[1, 1])
@@ -321,13 +318,9 @@ def _img2cam_kannala(points, camera_matrix, undistortion):
     points[:, 1] = (pixel_y - center_y) / focal_y
     rho = torch.norm(points[:, :2], dim=-1)
     phi = torch.atan2(points[:, 1], points[:, 0])
-    theta = rho * (
-        1
-        + undistortion[0] * (rho ** 2)
-        + undistortion[1] * (rho ** 4)
-        + undistortion[2] * (rho ** 6)
-        + undistortion[3] * (rho ** 8)
-    )
+    theta = rho * (1 + undistortion[0] * (rho**2) + undistortion[1] *
+                   (rho**4) + undistortion[2] * (rho**6) + undistortion[3] *
+                   (rho**8))
     points[:, 0] = torch.sin(theta) * torch.cos(phi) * dists
     points[:, 1] = torch.sin(theta) * torch.sin(phi) * dists
     points[:, 2] = torch.cos(theta) * dists
