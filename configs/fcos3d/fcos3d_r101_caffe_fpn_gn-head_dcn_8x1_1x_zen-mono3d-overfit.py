@@ -76,16 +76,16 @@ data = dict(
     samples_per_gpu=8,
     workers_per_gpu=8,
     train=dict(
-        times=1,
+        times=240,
         dataset=dict(
             pipeline=train_pipeline,
             classes=class_names,
-            ann_file=f'{_mmdir}/zen_infos_train_mono3d.coco.json',
+            ann_file=f'{_mmdir}/zen-single_infos_train_mono3d.coco.json',
         )),  # Train is a wrapped dataset
     val=dict(
         pipeline=test_pipeline,
         classes=class_names,
-        ann_file=f'{_mmdir}/zen_infos_val_mono3d.coco.json',
+        ann_file=f'{_mmdir}/zen-single_infos_val_mono3d.coco.json',
     ),
     test=dict(pipeline=test_pipeline))
 # optimizer
@@ -104,7 +104,7 @@ total_epochs = 12
 evaluation = dict(interval=2)
 
 log_config = dict(
-    # interval=10,
+    interval=10,
     # interval=50,
     hooks=[
         dict(type='TextLoggerHook'),

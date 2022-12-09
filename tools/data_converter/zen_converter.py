@@ -10,19 +10,17 @@ from pyquaternion import Quaternion
 from agp.zod.frames.zod_frames import ZodFrames
 from agp.zod.utils.constants import ALL_CLASSES, CAMERA_FRONT, LIDAR_VELODYNE
 from agp.zod.utils.objects import Box3D
-from agp.zod.utils.zod_dataclasses import (
-    CameraCalibration,
-    LidarCalibration,
-    OXTSData,
-    Pose,
-    SensorFrame,
-)
+from agp.zod.utils.zod_dataclasses import (CameraCalibration, LidarCalibration,
+                                           OXTSData, Pose, SensorFrame)
 from mmdet3d.core.bbox.structures.utils import points_cam2img
 
 
-def create_zen_infos(
-    root_path, out_dir, info_prefix, version="full", max_sweeps=10, use_blur=True
-):
+def create_zen_infos(root_path,
+                     out_dir,
+                     info_prefix,
+                     version='full',
+                     max_sweeps=10,
+                     use_blur=True):
     """Create info file of nuscene dataset.
 
     Given the raw data, generate its related info file in pkl format.
@@ -38,42 +36,44 @@ def create_zen_infos(
         use_blur (bool, optional): Whether to use blurred images.
             Default: True.
     """
-    if version == "single":
-        print(
-            "Specified single frame version, will only use the first frame of the mini set."
-        )
-        zod = ZodFrames(root_path, "mini")
-        train_scenes = zod.get_split("val")[0:1]
-        val_scenes = zod.get_split("val")[0:1]
+    if version == 'single':
+        print('Will only use the first frame of the mini set.')
+        zod = ZodFrames(root_path, 'mini')
+        train_scenes = zod.get_split('val')[0:1]
+        val_scenes = zod.get_split('val')[0:1]
     else:
         zod = ZodFrames(root_path, version)
-        train_scenes = zod.get_split("train")
-        val_scenes = zod.get_split("val")
+        train_scenes = zod.get_split('train')
+        val_scenes = zod.get_split('val')
     train_infos = _fill_infos(
-        zod, train_scenes, max_sweeps=max_sweeps, use_blur=use_blur
-    )
-    val_infos = _fill_infos(zod, val_scenes, max_sweeps=max_sweeps, use_blur=use_blur)
+        zod, train_scenes, max_sweeps=max_sweeps, use_blur=use_blur)
+    val_infos = _fill_infos(
+        zod, val_scenes, max_sweeps=max_sweeps, use_blur=use_blur)
 
     metadata = dict(version=version)
-    print("train sample: {}, val sample: {}".format(len(train_infos), len(val_infos)))
+    print('train sample: {}, val sample: {}'.format(
+        len(train_infos), len(val_infos)))
     data = dict(infos=train_infos, metadata=metadata)
-    info_path = osp.join(out_dir, "{}_infos_train.pkl".format(info_prefix))
+    info_path = osp.join(out_dir, '{}_infos_train.pkl'.format(info_prefix))
     mmcv.dump(data, info_path)
-    data["infos"] = val_infos
-    info_val_path = osp.join(out_dir, "{}_infos_val.pkl".format(info_prefix))
+    data['infos'] = val_infos
+    info_val_path = osp.join(out_dir, '{}_infos_val.pkl'.format(info_prefix))
     mmcv.dump(data, info_val_path)
 
 
-def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10, use_blur=True):
+def _fill_infos(zod: ZodFrames,
+                frames: List[str],
+                max_sweeps=10,
+                use_blur=True):
     """Generate the train/val infos from the raw data.
 
     Args:
-        zod (:obj:`ZenseactOpenDataset`): Dataset class in the ZenseactOpenDataset.
+        zod (:obj:`ZenseactOpenDataset`): Dataset class.
         frames (list[str]): IDs of the training/validation frames.
         max_sweeps (int, optional): Max number of sweeps. Default: 10.
 
     Returns:
-        list[dict]: Information of training/validation set that will be saved to the info file.
+        list[dict]: Information that will be saved to the info file.
     """
     infos = []
     for frame_id in mmcv.track_iter_progress(frames):
@@ -88,21 +88,21 @@ def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10, use_blur=True)
         core_ego_pose = oxts.get_ego_pose(frame_info.timestamp)
 
         info = {
-            "lidar_path": lidar_path,
-            "frame_id": frame_id,
-            "sweeps": [],
-            "cams": dict(),
-            "lidar2ego_translation": core_lidar2ego.translation,
-            "lidar2ego_rotation": core_lidar2ego.rotation,
-            "ego2global_translation": core_ego_pose.translation,
-            "ego2global_rotation": core_ego_pose.rotation,
-            "timestamp": frame_info.timestamp.timestamp(),
+            'lidar_path': lidar_path,
+            'frame_id': frame_id,
+            'sweeps': [],
+            'cams': dict(),
+            'lidar2ego_translation': core_lidar2ego.translation,
+            'lidar2ego_rotation': core_lidar2ego.rotation,
+            'ego2global_translation': core_ego_pose.translation,
+            'ego2global_rotation': core_ego_pose.rotation,
+            'timestamp': frame_info.timestamp.timestamp(),
         }
 
         cameras = [
             CAMERA_FRONT,
         ]
-        suffix = "_blur" if use_blur else "_dnat"
+        suffix = '_blur' if use_blur else '_dnat'
         for cam in cameras:
             cam_calib = calib.cameras[cam]
             cam_info = obtain_sensor2lidar(
@@ -114,30 +114,35 @@ def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10, use_blur=True)
                 cam,
             )
             # TEMPORARY HACK - REMOVE THIS
-            cam_info["data_path"] = cam_info["data_path"].replace(suffix, "_original")
+            cam_info['data_path'] = cam_info['data_path'].replace(
+                suffix, '_original')
             cam_info.update(
                 cam_intrinsic=cam_calib.intrinsics,
                 cam_distortion=cam_calib.distortion,
                 cam_undistortion=cam_calib.undistortion,
-                proj_model="kannala",
+                proj_model='kannala',
             )
-            info["cams"].update({cam: cam_info})
+            info['cams'].update({cam: cam_info})
 
         # obtain sweeps for a single key-frame
-        info["sweeps"] = [
-            obtain_sensor2lidar(
-                frame, lidar_calib, core_ego_pose, core_lidar2ego, oxts, "lidar"
-            )
-            for frame in frame_info.previous_lidar_frames[LIDAR_VELODYNE][:max_sweeps]
+        info['sweeps'] = [
+            obtain_sensor2lidar(frame, lidar_calib, core_ego_pose,
+                                core_lidar2ego, oxts, 'lidar') for frame in
+            frame_info.previous_lidar_frames[LIDAR_VELODYNE][:max_sweeps]
         ]
 
         # obtain annotation
         annos = zod.read_object_detection_annotation(frame_id)
-        locs = np.array([b.box3d.center if b.box3d else [-1,-1,-1] for b in annos]).reshape(-1, 3)
-        dims = np.array([b.box3d.size if b.box3d else [-1, -1, -1] for b in annos]).reshape(-1, 3)
-        rots = np.array([b.box3d.orientation.yaw_pitch_roll[0] if b.box3d else -1 for b in annos]).reshape(
-            -1, 1
-        )
+        locs = np.array([
+            b.box3d.center if b.box3d else [-1, -1, -1] for b in annos
+        ]).reshape(-1, 3)
+        dims = np.array([
+            b.box3d.size if b.box3d else [-1, -1, -1] for b in annos
+        ]).reshape(-1, 3)
+        rots = np.array([
+            b.box3d.orientation.yaw_pitch_roll[0] if b.box3d else -1
+            for b in annos
+        ]).reshape(-1, 1)
         gt_boxes = np.concatenate([locs, dims, rots], axis=1)
         # TODO: maybe check number of lidar points
         # valid_flag = np.array(
@@ -149,19 +154,23 @@ def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10, use_blur=True)
         # ).reshape(-1)
         valid_flag = np.ones(gt_boxes.shape[0], dtype=bool)
         has_3d = np.array([a.box3d is not None for a in annos], dtype=bool)
-        is_ignore = np.array([a.should_ignore_object() for a in annos], dtype=bool)
+        is_ignore = np.array([a.should_ignore_object() for a in annos],
+                             dtype=bool)
 
         names = [b.name for b in annos]
         names = np.array(names)
 
-        assert len(gt_boxes) == len(annos), f"{len(gt_boxes)}, {len(annos)}"
-        info["gt_boxes"] = gt_boxes
-        info["gt_names"] = names
-        info["gt_boxes_2d"] = np.array([b.box2d.xyxy for b in annos]).reshape(-1, 4)
-        # info["num_lidar_pts"] = np.array([a["num_lidar_pts"] for a in annotations])
-        info["valid_flag"] = valid_flag
-        info["has_3d"] = has_3d
-        info["is_ignore"] = is_ignore
+        assert len(gt_boxes) == len(annos), f'{len(gt_boxes)}, {len(annos)}'
+        info['gt_boxes'] = gt_boxes
+        info['gt_names'] = names
+        info['gt_boxes_2d'] = np.array([b.box2d.xyxy
+                                        for b in annos]).reshape(-1, 4)
+        # info["num_lidar_pts"] = np.array(
+        #   [a["num_lidar_pts"] for a in annotations]
+        # )
+        info['valid_flag'] = valid_flag
+        info['has_3d'] = has_3d
+        info['is_ignore'] = is_ignore
 
         infos.append(info)
 
@@ -176,17 +185,18 @@ def obtain_sensor2lidar(
     oxts: OXTSData,
     sensor_type: str,
 ) -> dict:
-    """Obtain the info with RT matric from general sensor to core (top) LiDAR."""
+    """Obtain the info with RT matric from general sensor to core (top)
+    LiDAR."""
     ego_pose = oxts.get_ego_pose(sensor_frame.timestamp)
     sensor2ego = sensor_calib.extrinsics
     sweep = {
-        "data_path": sensor_frame.filepath,
-        "type": sensor_type,
-        "sensor2ego_translation": sensor2ego.translation,
-        "sensor2ego_rotation": sensor2ego.rotation,
-        "ego2global_translation": ego_pose.translation,
-        "ego2global_rotation": ego_pose.rotation,
-        "timestamp": sensor_frame.timestamp.timestamp(),
+        'data_path': sensor_frame.filepath,
+        'type': sensor_type,
+        'sensor2ego_translation': sensor2ego.translation,
+        'sensor2ego_rotation': sensor2ego.rotation,
+        'ego2global_translation': ego_pose.translation,
+        'ego2global_rotation': ego_pose.rotation,
+        'timestamp': sensor_frame.timestamp.timestamp(),
     }
     # transforms for sweep frame
     s2e_t = sensor_calib.extrinsics.translation
@@ -203,18 +213,16 @@ def obtain_sensor2lidar(
     # obtain the RT from sensor to Top LiDAR
     # sweep->ego->global->ego'->lidar
     R = (s2e_r_mat.T @ e2g_r_s_mat.T) @ (
-        np.linalg.inv(e2g_r_mat).T @ np.linalg.inv(l2e_r_mat).T
-    )
+        np.linalg.inv(e2g_r_mat).T @ np.linalg.inv(l2e_r_mat).T)
     T = (s2e_t @ e2g_r_s_mat.T + e2g_t_s) @ (
-        np.linalg.inv(e2g_r_mat).T @ np.linalg.inv(l2e_r_mat).T
-    )
+        np.linalg.inv(e2g_r_mat).T @ np.linalg.inv(l2e_r_mat).T)
     T -= (
-        e2g_t @ (np.linalg.inv(e2g_r_mat).T @ np.linalg.inv(l2e_r_mat).T)
-        + l2e_t @ np.linalg.inv(l2e_r_mat).T
-    )
-    # NOTE: this is a bit strange, but sensor2lidar_rotation is a rotation matrix (other rotations are quaternions)
-    sweep["sensor2lidar_rotation"] = R.T  # points @ R.T + T
-    sweep["sensor2lidar_translation"] = T
+        e2g_t @ (np.linalg.inv(e2g_r_mat).T @ np.linalg.inv(l2e_r_mat).T) +
+        l2e_t @ np.linalg.inv(l2e_r_mat).T)
+    # NOTE: this is a bit strange, but sensor2lidar_rotation is a
+    # rotation matrix (other rotations are quaternions)
+    sweep['sensor2lidar_rotation'] = R.T  # points @ R.T + T
+    sweep['sensor2lidar_translation'] = T
     return sweep
 
 
@@ -228,21 +236,23 @@ def export_2d_annotation(root_path, info_path, version, mono3d=True):
         mono3d (bool, optional): Whether to export mono3d annotation.
             Default: True.
     """
-    version = version if version != "single" else "mini"
+    version = version if version != 'single' else 'mini'
     zod = ZodFrames(root_path, version=version)
 
     # get bbox annotations for camera
     camera_types = [CAMERA_FRONT]
-    infos = mmcv.load(info_path)["infos"]
+    infos = mmcv.load(info_path)['infos']
 
     # info_2d_list = []
-    cat2Ids = [dict(id=i, name=cat_name) for i, cat_name in enumerate(ALL_CLASSES)]
+    cat2Ids = [
+        dict(id=i, name=cat_name) for i, cat_name in enumerate(ALL_CLASSES)
+    ]
     coco_ann_id = 0
     coco_2d_dict = dict(annotations=[], images=[], categories=cat2Ids)
     for info in mmcv.track_iter_progress(infos):
         for cam in camera_types:
             image_id = f"{cam}_{info['frame_id']}"
-            cam_info = info["cams"][cam]
+            cam_info = info['cams'][cam]
             coco_infos = get_2d_boxes(
                 image_id,
                 info,
@@ -251,39 +261,39 @@ def export_2d_annotation(root_path, info_path, version, mono3d=True):
             )
             # alternative if this is slow:
             width, height = (
-                zod.read_calibration(info["frame_id"]).cameras[cam].image_dimensions
-            )
+                zod.read_calibration(
+                    info['frame_id']).cameras[cam].image_dimensions)
             # (height, width, _) = mmcv.imread(cam_info["data_path"]).shape
-            coco_2d_dict["images"].append(
+            coco_2d_dict['images'].append(
                 dict(
-                    file_name=os.path.relpath(cam_info["data_path"], root_path),
+                    file_name=os.path.relpath(cam_info['data_path'],
+                                              root_path),
                     id=image_id,
-                    frame_id=info["frame_id"],
-                    cam2ego_rotation=cam_info["sensor2ego_rotation"].elements,
-                    cam2ego_translation=cam_info["sensor2ego_translation"],
-                    ego2global_rotation=info["ego2global_rotation"].elements,
-                    ego2global_translation=info["ego2global_translation"],
-                    cam_intrinsic=cam_info["cam_intrinsic"],
-                    cam_distortion=cam_info["cam_distortion"],
-                    cam_undistortion=cam_info["cam_undistortion"],
-                    proj_model=cam_info["proj_model"],
+                    frame_id=info['frame_id'],
+                    cam2ego_rotation=cam_info['sensor2ego_rotation'].elements,
+                    cam2ego_translation=cam_info['sensor2ego_translation'],
+                    ego2global_rotation=info['ego2global_rotation'].elements,
+                    ego2global_translation=info['ego2global_translation'],
+                    cam_intrinsic=cam_info['cam_intrinsic'],
+                    cam_distortion=cam_info['cam_distortion'],
+                    cam_undistortion=cam_info['cam_undistortion'],
+                    proj_model=cam_info['proj_model'],
                     width=width,
                     height=height,
-                )
-            )
+                ))
             for coco_info in coco_infos:
                 if coco_info is None:
                     continue
                 # add an empty key for coco format
-                coco_info["segmentation"] = []
-                coco_info["id"] = coco_ann_id
-                coco_2d_dict["annotations"].append(coco_info)
+                coco_info['segmentation'] = []
+                coco_info['id'] = coco_ann_id
+                coco_2d_dict['annotations'].append(coco_info)
                 coco_ann_id += 1
     if mono3d:
-        json_prefix = f"{info_path[:-4]}_mono3d"
+        json_prefix = f'{info_path[:-4]}_mono3d'
     else:
-        json_prefix = f"{info_path[:-4]}"
-    mmcv.dump(coco_2d_dict, f"{json_prefix}.coco.json")
+        json_prefix = f'{info_path[:-4]}'
+    mmcv.dump(coco_2d_dict, f'{json_prefix}.coco.json')
 
 
 def get_2d_boxes(image_id, info, cam_info, mono3d=True):
@@ -298,23 +308,28 @@ def get_2d_boxes(image_id, info, cam_info, mono3d=True):
     """
     records = []
     cam2lidar = Pose.from_translation_rotation(
-        cam_info["sensor2lidar_translation"], cam_info["sensor2lidar_rotation"]
-    )
-    assert len(info["gt_boxes"]) == len(info["gt_names"]) == len(info["gt_boxes_2d"])
+        cam_info['sensor2lidar_translation'],
+        cam_info['sensor2lidar_rotation'])
+    assert len(info['gt_boxes']) == len(info['gt_names']) == len(
+        info['gt_boxes_2d'])
     for box, box2d, name, has_3d, is_ignore in zip(
-        info["gt_boxes"], info["gt_boxes_2d"], info["gt_names"], info["has_3d"], info["is_ignore"]
+            info['gt_boxes'],
+            info['gt_boxes_2d'],
+            info['gt_names'],
+            info['has_3d'],
+            info['is_ignore'],
     ):
         # Generate dictionary record to be included in the .json file.
         x1, y1, x2, y2 = box2d
         record = {
-            "bbox": [x1, y1, x2 - x1, y2 - y1],
-            "category_name": name,
-            "category_id": ALL_CLASSES.index(name),
-            "area": (y2 - y1) * (x2 - x1),
-            "file_name": cam_info["data_path"],
-            "image_id": image_id,
-            "iscrowd": is_ignore,
-            "has_3d": has_3d,
+            'bbox': [x1, y1, x2 - x1, y2 - y1],
+            'category_name': name,
+            'category_id': ALL_CLASSES.index(name),
+            'area': (y2 - y1) * (x2 - x1),
+            'file_name': cam_info['data_path'],
+            'image_id': image_id,
+            'iscrowd': is_ignore,
+            'has_3d': has_3d,
         }
 
         # If mono3d=True, add 3D annotations in camera coordinates
@@ -331,26 +346,27 @@ def get_2d_boxes(image_id, info, cam_info, mono3d=True):
             box._transform_inv(cam2lidar, CAMERA_FRONT)
 
             loc = box.center.tolist()
-            dim = box.size[
-                [0, 2, 1]
-            ].tolist()  # mmdet dimensions in cam coords are (l, h, w)
-            rot = [-box.orientation.yaw_pitch_roll[0]]  # rotation about gravity axis
-            record["bbox_cam3d"] = loc + dim + rot
+            dim = box.size[[
+                0, 2, 1
+            ]].tolist()  # mmdet dimensions in cam coords are (l, h, w)
+            rot = [-box.orientation.yaw_pitch_roll[0]
+                   ]  # rotation about gravity axis
+            record['bbox_cam3d'] = loc + dim + rot
 
             center3d = np.array(loc).reshape([1, 3])
             center2d = points_cam2img(
                 center3d,
-                cam_info["cam_intrinsic"],
+                cam_info['cam_intrinsic'],
                 with_depth=True,
                 meta={
-                    "distortion": cam_info["cam_distortion"],
-                    "proj_model": cam_info["proj_model"],
+                    'distortion': cam_info['cam_distortion'],
+                    'proj_model': cam_info['proj_model'],
                 },
             )
-            record["center2d"] = center2d.squeeze().tolist()
+            record['center2d'] = center2d.squeeze().tolist()
             # normalized center2D + depth
             # if samples with depth < 0 will be removed
-            if record["center2d"][2] <= 0:
+            if record['center2d'][2] <= 0:
                 print(f"depth < 0: {record['center2d'][2]}")
                 continue
 
