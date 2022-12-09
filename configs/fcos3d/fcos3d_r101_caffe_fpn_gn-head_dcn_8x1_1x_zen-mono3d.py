@@ -81,12 +81,14 @@ data = dict(
             pipeline=train_pipeline,
             classes=class_names,
             ann_file=f'{_mmdir}/zen_infos_train_mono3d.coco.json',
-        )),  # Train is a wrapped dataset
+            use_png=True,
+            anonymization_mode='original')),  # Train is a wrapped dataset
     val=dict(
         pipeline=test_pipeline,
         classes=class_names,
         ann_file=f'{_mmdir}/zen_infos_val_mono3d.coco.json',
-    ),
+        use_png=True,
+        anonymization_mode='original'),
     test=dict(pipeline=test_pipeline))
 # optimizer
 optimizer = dict(

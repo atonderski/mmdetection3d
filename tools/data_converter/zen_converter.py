@@ -8,7 +8,8 @@ import numpy as np
 from pyquaternion import Quaternion
 
 from agp.zod.frames.zod_frames import ZodFrames
-from agp.zod.utils.constants import ALL_CLASSES, CAMERA_FRONT, LIDAR_VELODYNE
+from agp.zod.utils.constants import (ALL_CLASSES, BLUR, CAMERA_FRONT,
+                                     LIDAR_VELODYNE)
 from agp.zod.utils.objects import Box3D
 from agp.zod.utils.zod_dataclasses import (CameraCalibration, LidarCalibration,
                                            OXTSData, Pose, SensorFrame)
@@ -19,8 +20,7 @@ def create_zen_infos(root_path,
                      out_dir,
                      info_prefix,
                      version='full',
-                     max_sweeps=10,
-                     use_blur=True):
+                     max_sweeps=10):
     """Create info file of nuscene dataset.
 
     Given the raw data, generate its related info file in pkl format.
@@ -33,8 +33,6 @@ def create_zen_infos(root_path,
             Default: 'v1.0-trainval'.
         max_sweeps (int, optional): Max number of sweeps.
             Default: 10.
-        use_blur (bool, optional): Whether to use blurred images.
-            Default: True.
     """
     if version == 'single':
         print('Will only use the first frame of the mini set.')
@@ -45,10 +43,8 @@ def create_zen_infos(root_path,
         zod = ZodFrames(root_path, version)
         train_scenes = zod.get_split('train')
         val_scenes = zod.get_split('val')
-    train_infos = _fill_infos(
-        zod, train_scenes, max_sweeps=max_sweeps, use_blur=use_blur)
-    val_infos = _fill_infos(
-        zod, val_scenes, max_sweeps=max_sweeps, use_blur=use_blur)
+    train_infos = _fill_infos(zod, train_scenes, max_sweeps=max_sweeps)
+    val_infos = _fill_infos(zod, val_scenes, max_sweeps=max_sweeps)
 
     metadata = dict(version=version)
     print('train sample: {}, val sample: {}'.format(
@@ -61,10 +57,7 @@ def create_zen_infos(root_path,
     mmcv.dump(data, info_val_path)
 
 
-def _fill_infos(zod: ZodFrames,
-                frames: List[str],
-                max_sweeps=10,
-                use_blur=True):
+def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10):
     """Generate the train/val infos from the raw data.
 
     Args:
@@ -102,20 +95,16 @@ def _fill_infos(zod: ZodFrames,
         cameras = [
             CAMERA_FRONT,
         ]
-        suffix = '_blur' if use_blur else '_dnat'
         for cam in cameras:
             cam_calib = calib.cameras[cam]
             cam_info = obtain_sensor2lidar(
-                frame_info.camera_frame[cam + suffix],
+                frame_info.camera_frame[f'{cam}_{BLUR}'],
                 calib.cameras[cam],
                 core_ego_pose,
                 core_lidar2ego,
                 oxts,
                 cam,
             )
-            # TEMPORARY HACK - REMOVE THIS
-            cam_info['data_path'] = cam_info['data_path'].replace(
-                suffix, '_original')
             cam_info.update(
                 cam_intrinsic=cam_calib.intrinsics,
                 cam_distortion=cam_calib.distortion,

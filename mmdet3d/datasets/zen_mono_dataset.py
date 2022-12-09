@@ -7,7 +7,7 @@ import numpy as np
 import pyquaternion
 import torch
 from mmcv.utils import print_log
-from zod.utils.constants import EVALUATION_CLASSES
+from zod.utils.constants import BLUR, EVALUATION_CLASSES
 
 from agp.zod.frames.evaluation.object_detection import DetectionBox, EvalBoxes
 from agp.zod.frames.evaluation.object_detection import \
@@ -66,6 +66,8 @@ class ZenMonoDataset(NuScenesMonoDataset):
         with_velocity=False,
         eval_version='zen',
         version=None,  # TODO: see if needed
+        anonymization_mode=BLUR,
+        use_png=False,
         **kwargs,
     ):
         super().__init__(
@@ -80,6 +82,24 @@ class ZenMonoDataset(NuScenesMonoDataset):
         )
         self.eval_version = eval_version
         self.bbox_code_size = 7
+        self.anonymization_mode = anonymization_mode
+        self.use_png = use_png
+        # Maybe change image paths depending on settings
+        if self.anonymization_mode != BLUR:
+            self._rename_image_paths(
+                lambda x: x.replace(BLUR, self.anonymization_mode))
+        if self.use_png:
+            self._rename_image_paths(lambda x: x.replace('.jpg', '.png'))
+
+    def _rename_image_paths(self, rename_func):
+        """Rename image paths.
+
+        Args:
+            rename_func (function): Function to rename image paths.
+        """
+        for info in self.data_infos:
+            info['filename'] = rename_func(info['filename'])
+            info['file_name'] = rename_func(info['file_name'])
 
     def _parse_ann_info(self, img_info, ann_info):
         """Parse bbox annotation.

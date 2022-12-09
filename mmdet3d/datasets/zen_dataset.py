@@ -6,7 +6,7 @@ import mmcv
 import numpy as np
 import pyquaternion
 from mmcv.utils import print_log
-from zod.utils.constants import EVALUATION_CLASSES
+from zod.utils.constants import BLUR, EVALUATION_CLASSES
 
 from agp.zod.frames.evaluation.object_detection import DetectionBox, EvalBoxes
 from agp.zod.frames.evaluation.object_detection import evaluate as zod_eval
@@ -71,6 +71,8 @@ class ZenDataset(Custom3DDataset):
         test_mode=False,
         eval_version='detection_cvpr_2019',
         use_valid_flag=True,
+        anonymization_mode=BLUR,
+        use_png=False,
     ):
         self.load_interval = load_interval
         self.use_valid_flag = use_valid_flag
@@ -84,7 +86,8 @@ class ZenDataset(Custom3DDataset):
             filter_empty_gt=filter_empty_gt,
             test_mode=test_mode,
         )
-
+        self.anonymization_mode = anonymization_mode
+        self.use_png = use_png
         self.eval_version = eval_version
         # from nuscenes.eval.detection.config import config_factory
 
@@ -97,6 +100,23 @@ class ZenDataset(Custom3DDataset):
                 use_map=False,
                 use_external=False,
             )
+
+        # Maybe change image paths depending on settings
+        if self.anonymization_mode != BLUR:
+            self._rename_image_paths(
+                lambda x: x.replace(BLUR, self.anonymization_mode))
+        if self.use_png:
+            self._rename_image_paths(lambda x: x.replace('.jpg', '.png'))
+
+    def _rename_image_paths(self, rename_func):
+        """Rename image paths.
+
+        Args:
+            rename_func (function): Function to rename image paths.
+        """
+        for info in self.data_infos:
+            for info in info['cams'].values():
+                info['data_path'] = rename_func(info['data_path'])
 
     def get_cat_ids(self, idx):
         """Get category distribution of single scene.
