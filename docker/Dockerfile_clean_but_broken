@@ -16,11 +16,11 @@ RUN mim install mmcv-full==1.6.0 -f https://download.openmmlab.com/mmcv/dist/cu1
 RUN mim install mmdet==2.25 mmsegmentation==0.28
 
 # Install some extra dependencies
-RUN mim install dataclass-wizard h5py open3d pyyaml llvmlite --ignore-installed pyyaml llvmlite
+RUN mim install zod open3d pyyaml llvmlite --ignore-installed pyyaml llvmlite
 
 # Install MMDetection3D
 COPY . /mmdetection3d
 WORKDIR /mmdetection3d
 ENV FORCE_CUDA="1"
 RUN mim install --no-cache-dir -e .
-ENV PYTHONPATH='.:./agp'
+ENV PYTHONPATH='.'

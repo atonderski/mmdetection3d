@@ -268,7 +268,7 @@ def points_img2cam(points, cam2img, meta=None):
 
     Args:
         points (torch.Tensor): 2.5D points in 2D images, [N, 3],
-            3 corresponds with x, y in the image and depth.
+            3 corresponds with x, y in the image and depth/distance.
         cam2img (torch.Tensor): Camera intrinsic matrix. The shape can be
             [3, 3], [3, 4] or [4, 4].
         meta (dict | None): this can contain information about alternative

@@ -13,7 +13,7 @@
 singularity exec --nv --bind /workspaces/$USER:/workspace \
   --bind /staging/dataset_donation:/staging/dataset_donation \
   --pwd /workspace/mmdetection3d/ \
-  --env PYTHONPATH=/workspace/mmdetection3d/:/workspace/mmdetection3d/agp \
+  --env PYTHONPATH=/workspace/mmdetection3d/ \
   /workspaces/s0000960/mmdetection3d/mmdet3d.sif \
   python3 -u $@
 #

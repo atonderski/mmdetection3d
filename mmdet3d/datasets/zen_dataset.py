@@ -6,10 +6,10 @@ import mmcv
 import numpy as np
 import pyquaternion
 from mmcv.utils import print_log
+from zod.frames.evaluation.object_detection import DetectionBox, EvalBoxes
+from zod.frames.evaluation.object_detection import evaluate as zod_eval
 from zod.utils.constants import BLUR, EVALUATION_CLASSES
 
-from agp.zod.frames.evaluation.object_detection import DetectionBox, EvalBoxes
-from agp.zod.frames.evaluation.object_detection import evaluate as zod_eval
 from ..core import show_result
 from ..core.bbox import Box3DMode, Coord3DMode, LiDARInstance3DBoxes
 from .builder import DATASETS
