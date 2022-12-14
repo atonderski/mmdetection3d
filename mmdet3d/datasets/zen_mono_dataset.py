@@ -7,10 +7,10 @@ import numpy as np
 import pyquaternion
 import torch
 from mmcv.utils import print_log
+from zod.constants import BLUR, EVALUATION_CLASSES
 from zod.frames.evaluation.object_detection import DetectionBox, EvalBoxes
 from zod.frames.evaluation.object_detection import \
     nuscenes_evaluate as zod_eval
-from zod.utils.constants import BLUR, EVALUATION_CLASSES
 
 from mmdet3d.core.bbox.structures.utils import points_cam2img
 from mmdet3d.core.evaluation.kitti_utils.eval import kitti_eval
