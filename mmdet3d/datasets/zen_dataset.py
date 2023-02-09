@@ -6,9 +6,11 @@ import mmcv
 import numpy as np
 import pyquaternion
 from mmcv.utils import print_log
-from zod.constants import BLUR, EVALUATION_CLASSES
-from zod.frames.evaluation.object_detection import DetectionBox, EvalBoxes
-from zod.frames.evaluation.object_detection import evaluate as zod_eval
+#from zod.constants import BLUR, EVALUATION_CLASSES
+from zod.constants import EVALUATION_CLASSES
+from zod.constants import Anonymization
+from zod.eval.detection import DetectionBox, EvalBoxes
+from zod.eval.detection import nuscenes_evaluate as zod_eval
 
 from ..core import show_result
 from ..core.bbox import Box3DMode, Coord3DMode, LiDARInstance3DBoxes
@@ -71,7 +73,7 @@ class ZenDataset(Custom3DDataset):
         test_mode=False,
         eval_version='detection_cvpr_2019',
         use_valid_flag=True,
-        anonymization_mode=BLUR,
+        anonymization_mode=Anonymization.BLUR.value,
         use_png=False,
     ):
         self.load_interval = load_interval
@@ -102,9 +104,9 @@ class ZenDataset(Custom3DDataset):
             )
 
         # Maybe change image paths depending on settings
-        if self.anonymization_mode != BLUR:
+        if self.anonymization_mode != Anonymization.BLUR.value:
             self._rename_image_paths(
-                lambda x: x.replace(BLUR, self.anonymization_mode))
+                lambda x: x.replace(Anonymization.BLUR.value, self.anonymization_mode))
         if self.use_png:
             self._rename_image_paths(lambda x: x.replace('.jpg', '.png'))
 

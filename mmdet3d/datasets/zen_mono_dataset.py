@@ -7,10 +7,9 @@ import numpy as np
 import pyquaternion
 import torch
 from mmcv.utils import print_log
-from zod.constants import BLUR, EVALUATION_CLASSES
-from zod.frames.evaluation.object_detection import DetectionBox, EvalBoxes
-from zod.frames.evaluation.object_detection import \
-    nuscenes_evaluate as zod_eval
+from zod.constants import Anonymization, EVALUATION_CLASSES
+from zod.eval.detection import DetectionBox, EvalBoxes
+from zod.eval.detection import nuscenes_evaluate as zod_eval
 
 from mmdet3d.core.bbox.structures.utils import points_cam2img
 from mmdet3d.core.evaluation.kitti_utils.eval import kitti_eval
@@ -66,7 +65,7 @@ class ZenMonoDataset(NuScenesMonoDataset):
         with_velocity=False,
         eval_version='zen',
         version=None,  # TODO: see if needed
-        anonymization_mode=BLUR,
+        anonymization_mode=Anonymization.BLUR.value,
         use_png=False,
         **kwargs,
     ):
@@ -85,9 +84,9 @@ class ZenMonoDataset(NuScenesMonoDataset):
         self.anonymization_mode = anonymization_mode
         self.use_png = use_png
         # Maybe change image paths depending on settings
-        if self.anonymization_mode != BLUR:
+        if self.anonymization_mode != Anonymization.BLUR.value:
             self._rename_image_paths(
-                lambda x: x.replace(BLUR, self.anonymization_mode))
+                lambda x: x.replace(Anonymization.BLUR.value, self.anonymization_mode))
         if self.use_png:
             self._rename_image_paths(lambda x: x.replace('.jpg', '.png'))
 
