@@ -7,7 +7,7 @@ import numpy as np
 import pyquaternion
 import torch
 from mmcv.utils import print_log
-from zod.constants import Anonymization, EVALUATION_CLASSES
+from zod.constants import EVALUATION_CLASSES, Anonymization
 from zod.eval.detection import DetectionBox, EvalBoxes
 from zod.eval.detection import nuscenes_evaluate as zod_eval
 
@@ -17,6 +17,8 @@ from mmdet3d.datasets.nuscenes_mono_dataset import NuScenesMonoDataset
 from mmdet3d.datasets.zen_dataset import flatten_dict
 from ..core.bbox import CameraInstance3DBoxes
 from .builder import DATASETS
+
+BLUR = Anonymization.BLUR.value
 
 
 @DATASETS.register_module()
@@ -65,7 +67,7 @@ class ZenMonoDataset(NuScenesMonoDataset):
         with_velocity=False,
         eval_version='zen',
         version=None,  # TODO: see if needed
-        anonymization_mode=Anonymization.BLUR.value,
+        anonymization_mode=BLUR,
         use_png=False,
         **kwargs,
     ):
@@ -84,9 +86,9 @@ class ZenMonoDataset(NuScenesMonoDataset):
         self.anonymization_mode = anonymization_mode
         self.use_png = use_png
         # Maybe change image paths depending on settings
-        if self.anonymization_mode != Anonymization.BLUR.value:
+        if self.anonymization_mode != BLUR:
             self._rename_image_paths(
-                lambda x: x.replace(Anonymization.BLUR.value, self.anonymization_mode))
+                lambda x: x.replace(BLUR, self.anonymization_mode))
         if self.use_png:
             self._rename_image_paths(lambda x: x.replace('.jpg', '.png'))
 
@@ -282,7 +284,7 @@ class ZenMonoDataset(NuScenesMonoDataset):
                     label: int,
                     score: float = -1.0) -> Optional[DetectionBox]:
         # object is in lidar frame - meaning that the rotation is
-        # around the y-axis
+        # around the y-axis. TODO: should this say camera frame?
         # TODO: check if rotation should be negative
         rot = pyquaternion.Quaternion(axis=(0, 1, 0), radians=box3d[6:])
         # TODO: perhaps it should be like this (taken from the kitti code)

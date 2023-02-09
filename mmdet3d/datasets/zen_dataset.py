@@ -1,14 +1,12 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from os import path as osp
-from typing import List
+from typing import List, Optional
 
 import mmcv
 import numpy as np
 import pyquaternion
 from mmcv.utils import print_log
-#from zod.constants import BLUR, EVALUATION_CLASSES
-from zod.constants import EVALUATION_CLASSES
-from zod.constants import Anonymization
+from zod.constants import EVALUATION_CLASSES, Anonymization
 from zod.eval.detection import DetectionBox, EvalBoxes
 from zod.eval.detection import nuscenes_evaluate as zod_eval
 
@@ -17,6 +15,8 @@ from ..core.bbox import Box3DMode, Coord3DMode, LiDARInstance3DBoxes
 from .builder import DATASETS
 from .custom_3d import Custom3DDataset
 from .pipelines import Compose
+
+BLUR = Anonymization.BLUR.value
 
 
 @DATASETS.register_module()
@@ -73,7 +73,7 @@ class ZenDataset(Custom3DDataset):
         test_mode=False,
         eval_version='detection_cvpr_2019',
         use_valid_flag=True,
-        anonymization_mode=Anonymization.BLUR.value,
+        anonymization_mode=BLUR,
         use_png=False,
     ):
         self.load_interval = load_interval
@@ -104,9 +104,9 @@ class ZenDataset(Custom3DDataset):
             )
 
         # Maybe change image paths depending on settings
-        if self.anonymization_mode != Anonymization.BLUR.value:
+        if self.anonymization_mode != BLUR:
             self._rename_image_paths(
-                lambda x: x.replace(Anonymization.BLUR.value, self.anonymization_mode))
+                lambda x: x.replace(BLUR, self.anonymization_mode))
         if self.use_png:
             self._rename_image_paths(lambda x: x.replace('.jpg', '.png'))
 
@@ -292,9 +292,16 @@ class ZenDataset(Custom3DDataset):
         Returns:
             dict[str, float]: Results of each evaluation metric.
         """
-        assert len(results[0]) == 1 and 'pts_bbox' in results[0], print(
-            results[0])
-        results = [res['pts_bbox'] for res in results]
+        assert isinstance(results, list), 'results must be a list'
+        assert len(results) == len(self), (
+            'The length of results is not equal to the dataset len: {} != {}'.
+            format(len(results), len(self)))
+
+        # Sometimes the results contain this additional dict layer
+        if 'pts_bbox' in results[0]:
+            results = [res['pts_bbox'] for res in results]
+        if 'img_bbox' in results[0]:
+            raise NotImplementedError('img_bbox is not supported in zen.')
 
         det_boxes, gt_boxes = EvalBoxes(), EvalBoxes()
         for idx, (det, info) in enumerate(zip(results, self.data_infos)):
@@ -302,7 +309,7 @@ class ZenDataset(Custom3DDataset):
             det_boxes.add_boxes(frame_id, self._det_to_zen(det, frame_id))
             gt_boxes.add_boxes(frame_id, self._gt_to_zen(idx, frame_id))
 
-        results_dict = zod_eval(gt_boxes, det_boxes)
+        results_dict = flatten_dict(zod_eval(gt_boxes, det_boxes))
         print_log(results_dict, logger=logger)
 
         if show or out_dir:
@@ -330,13 +337,15 @@ class ZenDataset(Custom3DDataset):
                     frame_id: str,
                     box3d: np.ndarray,
                     label: int,
-                    score: float = -1.0) -> DetectionBox:
+                    score: float = -1.0) -> Optional[DetectionBox]:
         # object is in lidar frame - meaning that the rotation is around
         # the z-axis
         rot = pyquaternion.Quaternion(axis=(0, 0, 1), radians=box3d[6:])
 
         # ego translation is same as translation since world is ego-centered
         class_name = self.CLASSES[int(label)]
+        if class_name not in EVALUATION_CLASSES:
+            return None
         box = DetectionBox(
             sample_token=frame_id,
             translation=tuple(box3d[:3]),
