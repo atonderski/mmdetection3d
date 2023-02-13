@@ -20,12 +20,12 @@ BLUR = Anonymization.BLUR.value
 
 
 @DATASETS.register_module()
-class ZenDataset(Custom3DDataset):
-    r"""Zenseact (Open) Dataset.
+class ZodFramesDataset(Custom3DDataset):
+    r"""Zenseact Open Dataset -- Frames.
 
-    This class serves as the API for experiments on the NuScenes Dataset.
+    This class serves as the API for experiments on ZOD-Frames.
 
-    Please refer to `Zenseac Open Dataset <https://www.dataset.zenseact.com>`_
+    Please refer to `Zenseac Open Dataset <https://zod.zenseact.com/download>`
     for data downloading.
 
     Args:
@@ -71,7 +71,7 @@ class ZenDataset(Custom3DDataset):
         box_type_3d='LiDAR',
         filter_empty_gt=True,
         test_mode=False,
-        eval_version='detection_cvpr_2019',
+        eval_version='detection_cvpr_2019',  # TODO: remove?
         use_valid_flag=True,
         anonymization_mode=BLUR,
         use_png=False,
@@ -271,7 +271,7 @@ class ZenDataset(Custom3DDataset):
         out_dir=None,
         pipeline=None,
     ):
-        """Evaluation in zen protocol.
+        """Evaluation in ZOD protocol.
 
         Args:
             results (list[dict]): Testing results of the dataset.
@@ -301,13 +301,13 @@ class ZenDataset(Custom3DDataset):
         if 'pts_bbox' in results[0]:
             results = [res['pts_bbox'] for res in results]
         if 'img_bbox' in results[0]:
-            raise NotImplementedError('img_bbox is not supported in zen.')
+            raise NotImplementedError('img_bbox is not supported in ZOD.')
 
         det_boxes, gt_boxes = EvalBoxes(), EvalBoxes()
         for idx, (det, info) in enumerate(zip(results, self.data_infos)):
             frame_id = info['frame_id']
-            det_boxes.add_boxes(frame_id, self._det_to_zen(det, frame_id))
-            gt_boxes.add_boxes(frame_id, self._gt_to_zen(idx, frame_id))
+            det_boxes.add_boxes(frame_id, self._det_to_zod(det, frame_id))
+            gt_boxes.add_boxes(frame_id, self._gt_to_zod(idx, frame_id))
 
         results_dict = flatten_dict(zod_eval(gt_boxes, det_boxes))
         print_log(results_dict, logger=logger)
@@ -316,24 +316,24 @@ class ZenDataset(Custom3DDataset):
             self.show(results, out_dir, show=show, pipeline=pipeline)
         return results_dict
 
-    def _det_to_zen(self, det: dict, frame_id: str) -> List[DetectionBox]:
+    def _det_to_zod(self, det: dict, frame_id: str) -> List[DetectionBox]:
         dets = []
         for box3d, label, score in zip(
                 det['boxes_3d'].tensor.numpy(),
                 det['labels_3d'].numpy(),
                 det['scores_3d'].numpy(),
         ):
-            dets.append(self._obj_to_zen(frame_id, box3d, label, score))
+            dets.append(self._obj_to_zod(frame_id, box3d, label, score))
         return dets
 
-    def _gt_to_zen(self, idx: int, frame_id: str) -> List[DetectionBox]:
+    def _gt_to_zod(self, idx: int, frame_id: str) -> List[DetectionBox]:
         anno: dict = self.get_ann_info(idx)
         gts = []
         for box3d, label in zip(anno['gt_bboxes_3d'], anno['gt_labels_3d']):
-            gts.append(self._obj_to_zen(frame_id, box3d, label))
+            gts.append(self._obj_to_zod(frame_id, box3d, label))
         return gts
 
-    def _obj_to_zen(self,
+    def _obj_to_zod(self,
                     frame_id: str,
                     box3d: np.ndarray,
                     label: int,
@@ -357,7 +357,7 @@ class ZenDataset(Custom3DDataset):
         )
         return box
 
-    # END Zen evaluation
+    # END ZOD evaluation
 
     def _build_default_pipeline(self):
         """Build the default pipeline for this dataset."""

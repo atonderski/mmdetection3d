@@ -28,8 +28,8 @@ from .semantickitti_dataset import SemanticKITTIDataset
 from .sunrgbd_dataset import SUNRGBDDataset
 from .utils import get_loading_pipeline
 from .waymo_dataset import WaymoDataset
-from .zen_dataset import ZenDataset
-from .zen_mono_dataset import ZenMonoDataset
+from .zod_frames import ZodFramesDataset
+from .zod_frames_mono import ZodFramesMonoDataset
 
 __all__ = [
     'KittiDataset',
@@ -78,6 +78,6 @@ __all__ = [
     'RangeLimitedRandomCrop',
     'RandomRotate',
     'MultiViewWrapper',
-    'ZenDataset',
-    'ZenMonoDataset',
+    'ZodFramesDataset',
+    'ZodFramesMonoDataset',
 ]

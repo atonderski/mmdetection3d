@@ -1,5 +1,5 @@
 _base_ = [
-    '../_base_/datasets/zen-mono3d.py', '../_base_/models/fcos3d.py',
+    '../_base_/datasets/zodmono3d.py', '../_base_/models/fcos3d.py',
     '../_base_/schedules/mmdet_schedule_1x.py', '../_base_/default_runtime.py'
 ]
 class_names = [
@@ -80,13 +80,13 @@ data = dict(
         dataset=dict(
             pipeline=train_pipeline,
             classes=class_names,
-            ann_file=f'{_mmdir}/zen_infos_train_mono3d.coco.json',
+            ann_file=f'{_mmdir}/zod_infos_train_mono3d.coco.json',
             use_png=True,
             anonymization_mode='original')),  # Train is a wrapped dataset
     val=dict(
         pipeline=test_pipeline,
         classes=class_names,
-        ann_file=f'{_mmdir}/zen_infos_val_mono3d.coco.json',
+        ann_file=f'{_mmdir}/zod_infos_val_mono3d.coco.json',
         use_png=True,
         anonymization_mode='original'),
     test=dict(pipeline=test_pipeline))
@@ -114,7 +114,7 @@ log_config = dict(
             type='MMDet3DWandbHook',
             init_kwargs=dict(
                 project='mmdet-test',
-                name='fcos3d_mono_zen',
+                name='fcos3d_mono_zod',
             ),
             log_checkpoint=False,
             log_checkpoint_metadata=False,

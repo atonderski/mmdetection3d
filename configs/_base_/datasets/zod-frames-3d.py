@@ -6,7 +6,7 @@ class_names = [
     'Vehicle', 'VulnerableVehicle', 'Pedestrian', 'TrafficSign',
     'TrafficSignal'
 ]
-dataset_type = 'ZenDataset'
+dataset_type = 'ZodFramesDataset'
 data_root = 'data/zod/'
 # Input modality for nuScenes dataset, this is consistent with the submission
 # format which requires the information in input_modality.
@@ -28,13 +28,13 @@ file_client_args = dict(backend='disk')
 #     }))
 train_pipeline = [
     dict(
-        type='ZenLoadPointsFromFile',
+        type='ZodLoadPointsFromFile',
         coord_type='LIDAR',
         load_dim=5,
         use_dim=5,
         file_client_args=file_client_args),
     dict(
-        type='ZenLoadPointsFromMultiSweeps',
+        type='ZodLoadPointsFromMultiSweeps',
         sweeps_num=0,
         file_client_args=file_client_args),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
@@ -54,13 +54,13 @@ train_pipeline = [
 ]
 test_pipeline = [
     dict(
-        type='ZenLoadPointsFromFile',
+        type='ZodLoadPointsFromFile',
         coord_type='LIDAR',
         load_dim=5,
         use_dim=5,
         file_client_args=file_client_args),
     dict(
-        type='ZenLoadPointsFromMultiSweeps',
+        type='ZodLoadPointsFromMultiSweeps',
         sweeps_num=0,
         file_client_args=file_client_args),
     dict(
@@ -88,13 +88,13 @@ test_pipeline = [
 # please keep its loading function consistent with test_pipeline (e.g. client)
 eval_pipeline = [
     dict(
-        type='ZenLoadPointsFromFile',
+        type='ZodLoadPointsFromFile',
         coord_type='LIDAR',
         load_dim=5,
         use_dim=5,
         file_client_args=file_client_args),
     dict(
-        type='ZenLoadPointsFromMultiSweeps',
+        type='ZodLoadPointsFromMultiSweeps',
         sweeps_num=0,
         file_client_args=file_client_args),
     dict(
@@ -113,7 +113,7 @@ data = dict(
         dataset=dict(
             type=dataset_type,
             data_root=data_root,
-            ann_file=data_root + 'mmdet3d/zen-mini_infos_train.pkl',
+            ann_file=data_root + 'mmdet3d/zod-single_infos_train.pkl',
             pipeline=train_pipeline,
             classes=class_names,
             modality=input_modality,
@@ -124,7 +124,7 @@ data = dict(
     val=dict(
         type=dataset_type,
         data_root=data_root,
-        ann_file=data_root + 'mmdet3d/zen-mini_infos_val.pkl',
+        ann_file=data_root + 'mmdet3d/zod-single_infos_val.pkl',
         pipeline=test_pipeline,
         classes=class_names,
         modality=input_modality,
@@ -133,7 +133,7 @@ data = dict(
     test=dict(
         type=dataset_type,
         data_root=data_root,
-        ann_file=data_root + 'mmdet3d/zen-mini_infos_val.pkl',
+        ann_file=data_root + 'mmdet3d/zod-single_infos_val.pkl',
         pipeline=test_pipeline,
         classes=class_names,
         modality=input_modality,

@@ -14,7 +14,7 @@ from zod.eval.detection import nuscenes_evaluate as zod_eval
 from mmdet3d.core.bbox.structures.utils import points_cam2img
 from mmdet3d.core.evaluation.kitti_utils.eval import kitti_eval
 from mmdet3d.datasets.nuscenes_mono_dataset import NuScenesMonoDataset
-from mmdet3d.datasets.zen_dataset import flatten_dict
+from mmdet3d.datasets.zod_frames import flatten_dict
 from ..core.bbox import CameraInstance3DBoxes
 from .builder import DATASETS
 
@@ -22,12 +22,12 @@ BLUR = Anonymization.BLUR.value
 
 
 @DATASETS.register_module()
-class ZenMonoDataset(NuScenesMonoDataset):
-    r"""Monocular 3D detection on NuScenes Dataset.
+class ZodFramesMonoDataset(NuScenesMonoDataset):
+    r"""Monocular 3D detection on Zenseact Open Dataset - Frames.
 
-    This class serves as the API for experiments on the NuScenes Dataset.
+    This class serves as the API for experiments on ZOD-Frames.
 
-    Please refer to `NuScenes Dataset <https://www.nuscenes.org/download>`_
+    Please refer to `Zenseac Open Dataset <https://zod.zenseact.com/download>`
     for data downloading.
 
     Args:
@@ -65,7 +65,7 @@ class ZenMonoDataset(NuScenesMonoDataset):
         pipeline,
         load_interval=1,
         with_velocity=False,
-        eval_version='zen',
+        eval_version='zod',
         version=None,  # TODO: see if needed
         anonymization_mode=BLUR,
         use_png=False,
@@ -203,7 +203,7 @@ class ZenMonoDataset(NuScenesMonoDataset):
         out_dir=None,
         pipeline=None,
     ):
-        """Evaluation in Zen protocol.
+        """Evaluation in either ZOD or KITTI protocol.
 
         Args:
             results (list[dict]): Testing results of the dataset.
@@ -232,8 +232,8 @@ class ZenMonoDataset(NuScenesMonoDataset):
 
         if self.eval_version == 'kitti':
             eval_results = self._evaluate_kitti(results, logger)
-        elif self.eval_version == 'zen':
-            eval_results = self._evaluate_zen(results, logger)
+        elif self.eval_version == 'zod':
+            eval_results = self._evaluate_zod(results, logger)
         else:
             raise ValueError('Unsupported eval_version: {}'.format(
                 self.eval_version))
@@ -241,10 +241,10 @@ class ZenMonoDataset(NuScenesMonoDataset):
             self.show(results, out_dir, show=show, pipeline=pipeline)
         return eval_results
 
-    # Zen evaluation
+    # ZOD evaluation
 
-    def _evaluate_zen(self, results, logger) -> dict:
-        """Evaluate in Zen protocol.
+    def _evaluate_zod(self, results, logger) -> dict:
+        """Evaluate in ZOD protocol.
 
         Args:
             results (list[dict]): Testing results of the dataset.
@@ -254,31 +254,31 @@ class ZenMonoDataset(NuScenesMonoDataset):
         det_boxes, gt_boxes = EvalBoxes(), EvalBoxes()
         for idx, (det, info) in enumerate(zip(results, self.data_infos)):
             frame_id = info['frame_id']
-            det_boxes.add_boxes(frame_id, self._det_to_zen(det, frame_id))
-            gt_boxes.add_boxes(frame_id, self._gt_to_zen(idx, frame_id))
+            det_boxes.add_boxes(frame_id, self._det_to_zod(det, frame_id))
+            gt_boxes.add_boxes(frame_id, self._gt_to_zod(idx, frame_id))
 
         results_dict = flatten_dict(zod_eval(gt_boxes, det_boxes))
         print_log(results_dict, logger=logger)
         return results_dict
 
-    def _det_to_zen(self, det: dict, frame_id: str) -> List[DetectionBox]:
+    def _det_to_zod(self, det: dict, frame_id: str) -> List[DetectionBox]:
         dets = []
         for box3d, label, score in zip(
                 det['boxes_3d'].tensor.numpy(),
                 det['labels_3d'].numpy(),
                 det['scores_3d'].numpy(),
         ):
-            dets.append(self._obj_to_zen(frame_id, box3d, label, score))
+            dets.append(self._obj_to_zod(frame_id, box3d, label, score))
         return [det for det in dets if det is not None]
 
-    def _gt_to_zen(self, idx: int, frame_id: str) -> List[DetectionBox]:
+    def _gt_to_zod(self, idx: int, frame_id: str) -> List[DetectionBox]:
         anno: dict = self.get_ann_info(idx)
         gts = []
         for box3d, label in zip(anno['gt_bboxes_3d'], anno['gt_labels_3d']):
-            gts.append(self._obj_to_zen(frame_id, box3d, label))
+            gts.append(self._obj_to_zod(frame_id, box3d, label))
         return [gt for gt in gts if gt is not None]
 
-    def _obj_to_zen(self,
+    def _obj_to_zod(self,
                     frame_id: str,
                     box3d: np.ndarray,
                     label: int,
@@ -364,10 +364,10 @@ class ZenMonoDataset(NuScenesMonoDataset):
                 box2d[:2] = np.maximum(box2d[:2], [0, 0])
                 if (box2d[0] - box2d[2]) * (box2d[1] - box2d[3]) <= 0:
                     continue
-                zen_name = self.CLASSES[int(label)]
-                if zen_name not in self.CLASSES_TO_KITTI:
+                zod_name = self.CLASSES[int(label)]
+                if zod_name not in self.CLASSES_TO_KITTI:
                     continue
-                kitti_name = self.CLASSES_TO_KITTI[zen_name]
+                kitti_name = self.CLASSES_TO_KITTI[zod_name]
                 kitti_dict['name'].append(kitti_name)
                 kitti_dict['truncated'].append(0.0)
                 kitti_dict['occluded'].append(0)
@@ -395,10 +395,10 @@ class ZenMonoDataset(NuScenesMonoDataset):
                 box2d[0] + box2d[2],
                 box2d[1] + box2d[3],
             ])
-            zen_name = self.CLASSES[int(label)]
-            if zen_name not in self.CLASSES_TO_KITTI:
+            zod_name = self.CLASSES[int(label)]
+            if zod_name not in self.CLASSES_TO_KITTI:
                 continue
-            kitti_name = self.CLASSES_TO_KITTI[zen_name]
+            kitti_name = self.CLASSES_TO_KITTI[zod_name]
             alpha = np.arctan(-np.arctan2(box3d[0], box3d[2]) + box3d[6])
             kitti_dict['bbox'].append(box2d_xyxy)
             kitti_dict['location'].append(box3d[:3])

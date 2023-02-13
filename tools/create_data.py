@@ -234,7 +234,7 @@ def zod_data_prep(root_path,
     zod_converter.export_2d_annotation(
         root_path, info_val_path, version=version)
     GTDatabaseCreater(
-        'ZenDataset',
+        'ZodFramesDataset',
         root_path,
         info_prefix,
         f'{out_dir}/{info_prefix}_infos_train.pkl',
@@ -244,7 +244,7 @@ def zod_data_prep(root_path,
                                    f'{info_prefix}_db_infos_train.pkl'),
     ).create()
     # create_groundtruth_database(
-    #     "ZenDataset",
+    #     "ZodFramesDataset",
     #     root_path,
     #     info_prefix,
     #     f"{out_dir}/{info_prefix}_infos_train.pkl",

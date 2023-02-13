@@ -697,7 +697,7 @@ class LoadAnnotations3D(LoadAnnotations):
         return repr_str
 
 
-def _zen_load_points(pts_filename, load_dim):
+def _zod_load_points(pts_filename, load_dim):
     """Private function to load point clouds data.
 
     Args:
@@ -724,14 +724,14 @@ def _zen_load_points(pts_filename, load_dim):
 
 
 @PIPELINES.register_module()
-class ZenLoadPointsFromFile(LoadPointsFromFile):
+class ZodLoadPointsFromFile(LoadPointsFromFile):
 
     def _load_points(self, pts_filename):
-        return _zen_load_points(pts_filename, self.load_dim)
+        return _zod_load_points(pts_filename, self.load_dim)
 
 
 @PIPELINES.register_module()
-class ZenLoadPointsFromMultiSweeps(LoadPointsFromMultiSweeps):
+class ZodLoadPointsFromMultiSweeps(LoadPointsFromMultiSweeps):
 
     def _load_points(self, pts_filename):
-        return _zen_load_points(pts_filename, self.load_dim)
+        return _zod_load_points(pts_filename, self.load_dim)

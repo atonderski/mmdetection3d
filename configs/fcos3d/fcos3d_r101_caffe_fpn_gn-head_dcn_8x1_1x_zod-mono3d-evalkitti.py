@@ -1,4 +1,4 @@
-_base_ = ['fcos3d_r101_caffe_fpn_gn-head_dcn_8x1_1x_zen-mono3d.py']
+_base_ = ['fcos3d_r101_caffe_fpn_gn-head_dcn_8x1_1x_zodmono3d.py']
 
 _mmdir = 'data/zod/mmdet3d'
 data = dict(
@@ -7,10 +7,10 @@ data = dict(
     train=dict(
         times=240,
         dataset=dict(
-            ann_file=f'{_mmdir}/zen-single_infos_train_mono3d.coco.json',
+            ann_file=f'{_mmdir}/zodsingle_infos_train_mono3d.coco.json',
             eval_version='kitti')),  # Train is a wrapped dataset
     val=dict(
-        ann_file=f'{_mmdir}/zen-single_infos_val_mono3d.coco.json',
+        ann_file=f'{_mmdir}/zodsingle_infos_val_mono3d.coco.json',
         eval_version='kitti'),
     test=dict(eval_version='kitti'),
 )
