@@ -6,16 +6,19 @@ from typing import List, Union
 import mmcv
 import numpy as np
 from pyquaternion import Quaternion
-from zod.constants import ALL_CLASSES, BLUR, CAMERA_FRONT, LIDAR_VELODYNE
-from zod.frames.zod_frames import ZodFrames
-from zod.utils.objects import Box3D
-from zod.utils.zod_dataclasses import (CameraCalibration, LidarCalibration,
-                                       OXTSData, Pose, SensorFrame)
+from zod import ZodFrames
+from zod.constants import (ALL_CLASSES, AnnotationProject, Anonymization,
+                           Camera, Lidar)
+from zod.data_classes.box import Box3D
+from zod.data_classes.calibration import CameraCalibration, LidarCalibration
+from zod.data_classes.geometry import Pose
+from zod.data_classes.oxts import EgoMotion
+from zod.data_classes.sensor import SensorFrame
 
 from mmdet3d.core.bbox.structures.utils import points_cam2img
 
 
-def create_zen_infos(root_path,
+def create_zod_infos(root_path,
                      out_dir,
                      info_prefix,
                      version='full',
@@ -60,7 +63,7 @@ def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10):
     """Generate the train/val infos from the raw data.
 
     Args:
-        zod (:obj:`ZenseactOpenDataset`): Dataset class.
+        zod (:obj:`ZodFrames`): Dataset class.
         frames (list[str]): IDs of the training/validation frames.
         max_sweeps (int, optional): Max number of sweeps. Default: 10.
 
@@ -69,18 +72,16 @@ def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10):
     """
     infos = []
     for frame_id in mmcv.track_iter_progress(frames):
-        frame_info = zod[frame_id]
-
-        lidar_path = frame_info.lidar_frame[LIDAR_VELODYNE].filepath
-        mmcv.check_file_exist(lidar_path)
-        calib = zod.read_calibration(frame_id)
-        oxts = zod.read_oxts(frame_id)
-        lidar_calib = calib.lidars[LIDAR_VELODYNE]
+        frame = zod[frame_id]
+        lidar_frame = frame.get_lidar_frames()[0]
+        mmcv.check_file_exist(lidar_frame.filepath)
+        lidar_calib = frame.calibration.lidars[Lidar.VELODYNE]
         core_lidar2ego = lidar_calib.extrinsics
-        core_ego_pose = oxts.get_ego_pose(frame_info.timestamp)
-
+        # TODO: Should timestamp be from lidar or camera?
+        core_timestamp = lidar_frame.time.timestamp()
+        core_ego_pose = Pose(frame.ego_motion.get_poses(core_timestamp))
         info = {
-            'lidar_path': lidar_path,
+            'lidar_path': lidar_frame.filepath,
             'frame_id': frame_id,
             'sweeps': [],
             'cams': dict(),
@@ -88,21 +89,21 @@ def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10):
             'lidar2ego_rotation': core_lidar2ego.rotation,
             'ego2global_translation': core_ego_pose.translation,
             'ego2global_rotation': core_ego_pose.rotation,
-            'timestamp': frame_info.timestamp.timestamp(),
+            'timestamp': core_timestamp,
         }
 
         cameras = [
-            CAMERA_FRONT,
+            Camera.FRONT,
         ]
         for cam in cameras:
-            cam_calib = calib.cameras[cam]
+            cam_calib = frame.calibration.cameras[cam]
             cam_info = obtain_sensor2lidar(
-                frame_info.camera_frame[f'{cam}_{BLUR}'],
-                calib.cameras[cam],
+                frame.get_camera_frame(Anonymization.BLUR),
+                cam_calib,
                 core_ego_pose,
                 core_lidar2ego,
-                oxts,
-                cam,
+                frame.ego_motion,
+                cam.value,  # TODO: Check what this is used for
             )
             cam_info.update(
                 cam_intrinsic=cam_calib.intrinsics,
@@ -110,17 +111,17 @@ def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10):
                 cam_undistortion=cam_calib.undistortion,
                 proj_model='kannala',
             )
-            info['cams'].update({cam: cam_info})
+            info['cams'].update({cam.value: cam_info})
 
         # obtain sweeps for a single key-frame
         info['sweeps'] = [
-            obtain_sensor2lidar(frame, lidar_calib, core_ego_pose,
-                                core_lidar2ego, oxts, 'lidar') for frame in
-            frame_info.previous_lidar_frames[LIDAR_VELODYNE][:max_sweeps]
+            obtain_sensor2lidar(lf, lidar_calib, core_ego_pose, core_lidar2ego,
+                                frame.ego_motion, 'lidar')
+            for lf in frame.get_lidar_frames(num_before=max_sweeps)[:-1]
         ]
 
         # obtain annotation
-        annos = zod.read_object_detection_annotation(frame_id)
+        annos = frame.get_annotation(AnnotationProject.OBJECT_DETECTION)
         locs = np.array([
             b.box3d.center if b.box3d else [-1, -1, -1] for b in annos
         ]).reshape(-1, 3)
@@ -170,12 +171,12 @@ def obtain_sensor2lidar(
     sensor_calib: Union[CameraCalibration, LidarCalibration],
     core_ego_pose: Pose,
     core_lidar2ego: Pose,
-    oxts: OXTSData,
+    ego_motion: EgoMotion,
     sensor_type: str,
 ) -> dict:
     """Obtain the info with RT matric from general sensor to core (top)
     LiDAR."""
-    ego_pose = oxts.get_ego_pose(sensor_frame.timestamp)
+    ego_pose = Pose(ego_motion.get_poses(sensor_frame.time.timestamp()))
     sensor2ego = sensor_calib.extrinsics
     sweep = {
         'data_path': sensor_frame.filepath,
@@ -184,7 +185,7 @@ def obtain_sensor2lidar(
         'sensor2ego_rotation': sensor2ego.rotation,
         'ego2global_translation': ego_pose.translation,
         'ego2global_rotation': ego_pose.rotation,
-        'timestamp': sensor_frame.timestamp.timestamp(),
+        'timestamp': sensor_frame.time.timestamp(),
     }
     # transforms for sweep frame
     s2e_t = sensor_calib.extrinsics.translation
@@ -228,7 +229,7 @@ def export_2d_annotation(root_path, info_path, version, mono3d=True):
     zod = ZodFrames(root_path, version=version)
 
     # get bbox annotations for camera
-    camera_types = [CAMERA_FRONT]
+    camera_types = [Camera.FRONT]
     infos = mmcv.load(info_path)['infos']
 
     # info_2d_list = []
@@ -238,9 +239,10 @@ def export_2d_annotation(root_path, info_path, version, mono3d=True):
     coco_ann_id = 0
     coco_2d_dict = dict(annotations=[], images=[], categories=cat2Ids)
     for info in mmcv.track_iter_progress(infos):
+        frame = zod[info['frame_id']]
         for cam in camera_types:
-            image_id = f"{cam}_{info['frame_id']}"
-            cam_info = info['cams'][cam]
+            image_id = f"camera_{cam.value}_{info['frame_id']}"
+            cam_info = info['cams'][cam.value]
             coco_infos = get_2d_boxes(
                 image_id,
                 info,
@@ -248,10 +250,8 @@ def export_2d_annotation(root_path, info_path, version, mono3d=True):
                 mono3d=mono3d,
             )
             # alternative if this is slow:
-            width, height = (
-                zod.read_calibration(
-                    info['frame_id']).cameras[cam].image_dimensions)
-            # (height, width, _) = mmcv.imread(cam_info["data_path"]).shape
+            width = frame.get_camera_frame().width
+            height = frame.get_camera_frame().height
             coco_2d_dict['images'].append(
                 dict(
                     file_name=os.path.relpath(cam_info['data_path'],
@@ -329,9 +329,9 @@ def get_2d_boxes(image_id, info, cam_info, mono3d=True):
                 box[:3],
                 box[3:6],
                 Quaternion(axis=(0, 0, 1), radians=box[6]),
-                frame=LIDAR_VELODYNE,
+                frame=Lidar.VELODYNE,
             )
-            box._transform_inv(cam2lidar, CAMERA_FRONT)
+            box._transform_inv(cam2lidar, Camera.FRONT)
 
             loc = box.center.tolist()
             dim = box.size[[

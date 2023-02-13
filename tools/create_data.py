@@ -7,7 +7,7 @@ from tools.data_converter import indoor_converter as indoor
 from tools.data_converter import kitti_converter as kitti
 from tools.data_converter import lyft_converter as lyft_converter
 from tools.data_converter import nuscenes_converter as nuscenes_converter
-from tools.data_converter import zen_converter
+from tools.data_converter import zod_converter
 from tools.data_converter.create_gt_database import (
     GTDatabaseCreater, create_groundtruth_database)
 
@@ -201,13 +201,13 @@ def waymo_data_prep(root_path,
     ).create()
 
 
-def zen_data_prep(root_path,
+def zod_data_prep(root_path,
                   info_prefix,
                   version,
                   out_dir,
                   workers,
                   max_sweeps=10):
-    """Prepare data related to Zenseact Open Dataset.
+    """Prepare data related to Zenseact Open Dataset (ZOD).
 
     Related data consists of '.pkl' files recording basic infos,
     2D annotations and groundtruth database.
@@ -221,7 +221,7 @@ def zen_data_prep(root_path,
             Default: 10
     """
     os.makedirs(out_dir, exist_ok=True)
-    zen_converter.create_zen_infos(
+    zod_converter.create_zod_infos(
         root_path,
         out_dir,
         info_prefix,
@@ -229,9 +229,9 @@ def zen_data_prep(root_path,
         max_sweeps=max_sweeps)
     info_train_path = osp.join(out_dir, f'{info_prefix}_infos_train.pkl')
     info_val_path = osp.join(out_dir, f'{info_prefix}_infos_val.pkl')
-    zen_converter.export_2d_annotation(
+    zod_converter.export_2d_annotation(
         root_path, info_train_path, version=version)
-    zen_converter.export_2d_annotation(
+    zod_converter.export_2d_annotation(
         root_path, info_val_path, version=version)
     GTDatabaseCreater(
         'ZenDataset',
@@ -365,8 +365,8 @@ if __name__ == '__main__':
             out_dir=args.out_dir,
             workers=args.workers,
         )
-    elif args.dataset == 'zen':
-        zen_data_prep(
+    elif args.dataset == 'zod':
+        zod_data_prep(
             root_path=args.root_path,
             info_prefix=args.extra_tag,
             version=args.version,
