@@ -7,8 +7,8 @@ import mmcv
 import numpy as np
 from pyquaternion import Quaternion
 from zod import ZodFrames
-from zod.constants import (ALL_CLASSES, AnnotationProject, Anonymization,
-                           Camera, Lidar)
+from zod.anno.object import OBJECT_CLASSES as ALL_CLASSES
+from zod.constants import AnnotationProject, Anonymization, Camera, Lidar
 from zod.data_classes.box import Box3D
 from zod.data_classes.calibration import CameraCalibration, LidarCalibration
 from zod.data_classes.geometry import Pose

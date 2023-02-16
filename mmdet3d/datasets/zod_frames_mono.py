@@ -7,9 +7,9 @@ import numpy as np
 import pyquaternion
 import torch
 from mmcv.utils import print_log
-from zod.constants import EVALUATION_CLASSES, Anonymization
-from zod.eval.detection import DetectionBox, EvalBoxes
-from zod.eval.detection import nuscenes_evaluate as zod_eval
+from zod.constants import Anonymization
+from zod.eval.detection import EVALUATION_CLASSES, DetectionBox, EvalBoxes
+from zod.eval.detection import evaluate_nuscenes_style as zod_eval
 
 from mmdet3d.core.bbox.structures.utils import points_cam2img
 from mmdet3d.core.evaluation.kitti_utils.eval import kitti_eval

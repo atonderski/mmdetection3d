@@ -6,9 +6,9 @@ import mmcv
 import numpy as np
 import pyquaternion
 from mmcv.utils import print_log
-from zod.constants import EVALUATION_CLASSES, Anonymization
-from zod.eval.detection import DetectionBox, EvalBoxes
-from zod.eval.detection import nuscenes_evaluate as zod_eval
+from zod.constants import Anonymization
+from zod.eval.detection import EVALUATION_CLASSES, DetectionBox, EvalBoxes
+from zod.eval.detection import evaluate_nuscenes_style as zod_eval
 
 from ..core import show_result
 from ..core.bbox import Box3DMode, Coord3DMode, LiDARInstance3DBoxes
