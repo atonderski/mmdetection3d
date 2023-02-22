@@ -37,10 +37,10 @@ def create_zod_infos(root_path,
             Default: 10.
     """
     if version == 'single':
-        print('Will only use the first frame of the mini set.')
+        print('Will only use a single (the second) frame from the mini set.')
         zod = ZodFrames(root_path, 'mini')
-        train_scenes = zod.get_split('val')[0:1]
-        val_scenes = zod.get_split('val')[0:1]
+        train_scenes = zod.get_split('val')[1:2]
+        val_scenes = zod.get_split('val')[1:2]
     else:
         zod = ZodFrames(root_path, version)
         train_scenes = zod.get_split('train')
