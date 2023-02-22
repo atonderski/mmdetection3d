@@ -61,6 +61,8 @@ test_pipeline = [
         file_client_args=file_client_args),
     dict(
         type='ZodLoadPointsFromMultiSweeps',
+        use_dim=[0, 1, 2, 3, 4],
+        time_dim=4,
         sweeps_num=0,
         file_client_args=file_client_args),
     dict(
@@ -109,7 +111,7 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
-        times=1,
+        times=100,
         dataset=dict(
             type=dataset_type,
             data_root=data_root,
