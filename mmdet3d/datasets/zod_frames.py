@@ -309,7 +309,7 @@ class ZodFramesDataset(Custom3DDataset):
             det_boxes.add_boxes(frame_id, self._det_to_zod(det, frame_id))
             gt_boxes.add_boxes(frame_id, self._gt_to_zod(idx, frame_id))
 
-        results_dict = flatten_dict(zod_eval(gt_boxes, det_boxes))
+        results_dict = zod_eval(gt_boxes, det_boxes)
         print_log(results_dict, logger=logger)
 
         if show or out_dir:
@@ -414,16 +414,3 @@ class ZodFramesDataset(Custom3DDataset):
                                                  Box3DMode.DEPTH)
             show_result(points, show_gt_bboxes, show_pred_bboxes, out_dir,
                         file_name, show)
-
-
-def flatten_dict(d):
-    """Flatten a dict while concatenating keys."""
-    result = {}
-    for key, value in d.items():
-        if isinstance(value, dict):
-            result.update(
-                {key + '/' + k: v
-                 for k, v in flatten_dict(value).items()})
-        else:
-            result[key] = value
-    return result

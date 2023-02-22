@@ -716,9 +716,9 @@ def _zod_load_points(pts_filename, load_dim):
     if load_dim >= 4:
         fields_to_load.append(points['intensity'].astype(np.float32))
     if load_dim >= 5:
-        fields_to_load.append(points['diode_index'].astype(np.float32))
+        fields_to_load.append(points['timestamp'].astype(np.float32) / 1e6)
     if load_dim >= 6:
-        fields_to_load.append(points['timestamp'].astype(np.float32))
+        fields_to_load.append(points['diode_index'].astype(np.float32))
     points = np.stack(fields_to_load, axis=1)
     return points
 
