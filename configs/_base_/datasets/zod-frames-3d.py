@@ -12,7 +12,7 @@ data_root = 'data/zod/'
 # format which requires the information in input_modality.
 input_modality = dict(
     use_lidar=True,
-    use_camera=False,
+    use_camera=True,
     use_radar=False,
     use_map=False,
     use_external=False)
@@ -99,6 +99,7 @@ eval_pipeline = [
         type='ZodLoadPointsFromMultiSweeps',
         sweeps_num=0,
         file_client_args=file_client_args),
+    dict(type='LoadImageFromFile'),
     dict(
         type='DefaultFormatBundle3D',
         class_names=class_names,

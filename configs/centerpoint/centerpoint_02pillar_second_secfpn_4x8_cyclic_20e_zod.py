@@ -107,6 +107,7 @@ test_pipeline = [
     #     file_client_args=file_client_args,
     #     pad_empty_sweeps=True,
     #     remove_close=True),
+    dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug3D',
         img_scale=(1333, 800),
@@ -142,6 +143,7 @@ eval_pipeline = [
     #     file_client_args=file_client_args,
     #     pad_empty_sweeps=True,
     #     remove_close=True),
+    dict(type='LoadImageFromFile'),
     dict(
         type='DefaultFormatBundle3D',
         class_names=class_names,
@@ -183,7 +185,8 @@ log_config = dict(
             log_checkpoint_metadata=False,
             num_eval_images=1,
             bbox_score_thr=0.1,
-            range_3d=point_cloud_range,
+            visualize_3d=True,
+            visualize_img=True,
             max_points=20000,
         )
     ])

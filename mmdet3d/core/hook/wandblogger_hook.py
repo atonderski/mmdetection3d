@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from mmcv.runner import HOOKS
 
+from mmdet3d.core.bbox.structures.box_3d_mode import Box3DMode
 from mmdet3d.core.bbox.structures.utils import points_cam2img
 from mmdet.core import MMDetWandbHook
 
@@ -24,7 +25,7 @@ class MMDet3DWandbHook(MMDetWandbHook):
     """
 
     def __init__(self,
-                 visualize_3d=None,
+                 visualize_3d=False,
                  visualize_img=False,
                  max_points=None,
                  **kwargs):
@@ -33,6 +34,10 @@ class MMDet3DWandbHook(MMDetWandbHook):
         self._visualize_img = visualize_img
         self._max_points = max_points
         self._lidar_loader = None
+
+        # Cached objs and infos for image visualizations
+        self._img_gt_objs = {}
+        self._val_img_infos = {}
 
     def _add_ground_truth(self, runner):
         # Randomly select the samples to be logged (with consistent seed)
@@ -60,16 +65,16 @@ class MMDet3DWandbHook(MMDetWandbHook):
     def _get_pred_boxes(self, results):
         """Get the predicted bounding boxes from the results."""
         boxes_3d = results['boxes_3d']
-        scores = results['scores_3d'].numpy()
-        labels = results['labels_3d'].numpy()
+        labels = results['labels_3d']
+        scores = results['scores_3d']
         # Remove bounding boxes and masks with score lower than threshold.
         if self.bbox_score_thr > 0:
             assert boxes_3d is not None
             inds = scores > self.bbox_score_thr
             boxes_3d = boxes_3d[inds]
-            scores = scores[inds]
             labels = labels[inds]
-        return boxes_3d, scores, labels
+            scores = scores[inds]
+        return boxes_3d, labels, scores
 
     def _log_predictions(self, results):
         for ndx, eval_image_index in enumerate(self.eval_idxs):
@@ -77,17 +82,24 @@ class MMDet3DWandbHook(MMDetWandbHook):
                 # Reference the data artifact for efficient de-duplication
                 table_idxs = self.data_table_ref.get_index()
                 assert len(table_idxs) == len(self.eval_idxs)
-                img_results = results[eval_image_index]['img_bbox']
-                preds = self._get_pred_boxes(img_results)
-                img_info = self.val_dataset.data_infos[eval_image_index]
+                results_img = results[eval_image_index]
+                # Prioritize img detections over pts detections if we
+                # are using the nested format
+                if 'img_bbox' in results_img:
+                    results_img = results_img['img_bbox']
+                elif 'pts_bbox' in results_img:
+                    results_img = results_img['pts_bbox']
+                preds = self._get_pred_boxes(results_img)
                 data_ref = self.data_table_ref.data[ndx]
-                self._add_img_predictions(preds, img_info, data_ref)
+                self._add_img_predictions(preds, data_ref, eval_image_index)
             if self._visualize_3d is not None:
                 # 3D vis does not support de-duplication yet:
                 # https://github.com/wandb/wandb/issues/4989
                 results_3d = results[eval_image_index]
                 if 'pts_bbox' in results_3d:
                     results_3d = results_3d['pts_bbox']
+                elif 'img_bbox' in results_3d:
+                    results_3d = results_3d['img_bbox']
                 preds = self._get_pred_boxes(results_3d)
                 self._add_3d_predictions(preds, eval_image_index)
 
@@ -110,8 +122,8 @@ class MMDet3DWandbHook(MMDetWandbHook):
     def _add_3d_predictions(self, preds, idx):
         content: Dict[str, Any] = {'type': 'lidar/beta'}
         if self._lidar_loader:
-            # Load point cloud
             data_info = self.val_dataset.get_data_info(idx)
+            # Load point cloud
             points = self._lidar_loader(data_info)['points']
             points = points.tensor[:, :3].numpy()
             if self._max_points and points.shape[0] > self._max_points:
@@ -141,16 +153,17 @@ class MMDet3DWandbHook(MMDetWandbHook):
         Returns:
             numpy array of bounding boxes to be logged.
         """
+        # TODO: should we convert camera boxes to lidar here?
         box_data = []
-        for label, corners in zip(labels, boxes_3d.corners):
-            if not isinstance(label, int):
-                label = int(label)
-            class_name = str(self.class_id_to_label.get(label, str(label)))
+        for i, (label, corners) in enumerate(zip(labels, boxes_3d.corners)):
+            label = int(label)
+            class_name = str(self.class_id_to_label[label])
             if scores is not None:
+                score = float(scores[i])
                 box_data.append({
                     'corners': corners.tolist(),
                     'label': f'{class_name}',
-                    'color': (255, 0, 0),  # red for pred
+                    'color': (255 * score, 0, 0),  # red for pred
                 })
             else:
                 box_data.append({
@@ -162,53 +175,96 @@ class MMDet3DWandbHook(MMDetWandbHook):
 
     # Image Visualizations #
 
+    def _extract_image_info(self, idx):
+        """Get image info from dataset and cache it."""
+        info = {}
+        from mmdet3d.datasets import Custom3DDataset
+        if isinstance(self.val_dataset, Custom3DDataset):
+            data_info = self.val_dataset.get_data_info(idx)
+            assert isinstance(data_info, dict)
+            for field in [
+                    'cam2img', 'distortion', 'proj_model', 'lidar2cam',
+                    'lidar2img'
+            ]:
+                if field in data_info:
+                    info[field] = data_info[field]
+        else:
+            # Assume that this is a mono3d dataset
+            data_info = self.val_dataset.data_infos[idx]
+            info = {
+                'cam2img': data_info['cam_intrinsic'],
+                'distortion': data_info['cam_distortion'],
+                'proj_model': data_info['proj_model'],
+            }
+        self._val_img_infos[idx] = info
+        return info
+
     def _add_img_ground_truth(self, runner):
-        # Get image loading pipeline
+        # Get image loader
         from mmdet3d.datasets.pipelines.loading import (
             LoadImageFromFile, LoadImageFromFileMono3D,
             LoadMultiViewImageFromFiles)
         img_loader = None
-        # TODO: support other image loading pipelines
         for t in self.val_dataset.pipeline.transforms:
-            if isinstance(t, (LoadImageFromFileMono3D,
-                              LoadMultiViewImageFromFiles, LoadImageFromFile)):
+            if isinstance(t, (
+                    LoadImageFromFileMono3D,
+                    LoadMultiViewImageFromFiles,
+                    LoadImageFromFile,
+            )):
                 img_loader = t
         if img_loader is None:
             self.log_evaluation = False
             runner.logger.warning(
-                'LoadImageFromFile is required to add images '
+                'Some image loader is required to add images '
                 'to W&B Tables.')
             return
-        img_prefix = self.val_dataset.img_prefix
 
         for idx in self.eval_idxs:
-            img_info = self.val_dataset.data_infos[idx]
-            image_name = img_info.get('filename', f'img_{idx}')
-            img_meta = img_loader(
-                dict(img_info=img_info, img_prefix=img_prefix))
-            image = mmcv.bgr2rgb(img_meta['img'])
+            img_info = self._extract_image_info(idx)
+            # Load the image
+            if isinstance(img_loader, LoadImageFromFileMono3D):
+                image = img_loader(
+                    {'img_info': self.val_dataset.data_infos[idx]})['img']
+            else:
+                image = img_loader(self.val_dataset.get_data_info(idx))['img']
+                if len(image.shape) > 3:
+                    # If multi-view, we only pick the first camera
+                    image = image[0]
+                    for field in list(img_info.keys()):
+                        img_info[field] = img_info[field][0]
+            image = mmcv.bgr2rgb(image)
 
+            # Parse ground truth boxes
             data_ann = self.val_dataset.get_ann_info(idx)
             wandb_boxes = self._get_wandb_bboxes_img(
-                img_meta,
-                data_ann['bboxes_3d'],
-                data_ann['labels_3d'],
+                img_info,
+                data_ann['gt_bboxes_3d'],
+                data_ann['gt_labels_3d'],
             )
+            self._img_gt_objs[idx] = wandb_boxes.copy()
 
             # Log a row to the data table.
             self.data_table.add_data(
-                image_name,
+                f'img_{idx}',
                 self.wandb.Image(
                     image, boxes=wandb_boxes, classes=self.class_set))
 
-    def _add_img_predictions(self, preds, img_info, data_ref):
+    def _add_img_predictions(self, preds, data_ref, eval_image_index):
+        img_info = self._val_img_infos[eval_image_index]
         boxes_3d, labels, scores = preds
-        wandb_boxes = self._get_wandb_bboxes_img(
+        pred_boxes = self._get_wandb_bboxes_img(
             img_info, boxes_3d, labels, scores, log_gt=False)
         self.eval_table.add_data(
             data_ref[0], data_ref[1],
             self.wandb.Image(
-                data_ref[1], boxes=wandb_boxes, classes=self.class_set))
+                data_ref[1], boxes=pred_boxes, classes=self.class_set))
+        gts = self._img_gt_objs[eval_image_index]
+        both_boxes = {**gts, **pred_boxes}
+        self.wandb.log({
+            'img_predictions':
+            self.wandb.Image(
+                data_ref[1], boxes=both_boxes, classes=self.class_set)
+        })
 
     def _get_wandb_bboxes_img(self,
                               img_info,
@@ -228,28 +284,11 @@ class MMDet3DWandbHook(MMDetWandbHook):
         Returns:
             Dictionary of bounding boxes to be logged.
         """
-        # Project bbox to 2d
-        box_corners_in_image = points_cam2img(
-            boxes_3d.corners,
-            proj_mat=img_info['cam_intrinsic'],
-            meta={
-                'distortion': img_info['cam_distortion'],
-                'proj_model': img_info['proj_model']
-            },
-        )
-        minxy = torch.min(box_corners_in_image, dim=-2)[0]
-        maxxy = torch.max(box_corners_in_image, dim=-2)[0]
-        if scores is None:
-            bboxes = torch.cat([minxy, maxxy], dim=-1)
-        else:
-            bboxes = torch.cat([minxy, maxxy, scores[:, None]], dim=-1)
-
+        bboxes = _box3d_to_img(boxes_3d, img_info)
         wandb_boxes = {}
         box_data = []
         for bbox, label in zip(bboxes, labels):
-            if not isinstance(label, int):
-                label = int(label)
-
+            label = int(label)
             if len(bbox) == 5:
                 confidence = float(bbox[4])
                 class_name = self.class_id_to_label[label]
@@ -283,3 +322,20 @@ class MMDet3DWandbHook(MMDetWandbHook):
             wandb_boxes['predictions'] = wandb_bbox_dict
 
         return wandb_boxes
+
+
+def _box3d_to_img(boxes_3d, img_info, scores=None):
+    # Move box to camera frame
+    from mmdet3d.core import LiDARInstance3DBoxes
+    if isinstance(boxes_3d, LiDARInstance3DBoxes):
+        boxes_3d = boxes_3d.convert_to(Box3DMode.CAM, img_info['lidar2cam'])
+    # Project bbox to 2d
+    box_corners_in_image = points_cam2img(
+        boxes_3d.corners, proj_mat=img_info['cam2img'], meta=img_info)
+    minxy = torch.min(box_corners_in_image, dim=-2)[0]
+    maxxy = torch.max(box_corners_in_image, dim=-2)[0]
+    if scores is None:
+        bboxes = torch.cat([minxy, maxxy], dim=-1)
+    else:
+        bboxes = torch.cat([minxy, maxxy, scores[:, None]], dim=-1)
+    return bboxes

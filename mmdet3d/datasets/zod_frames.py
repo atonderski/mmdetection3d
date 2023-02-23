@@ -1,4 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+from collections import defaultdict
 from os import path as osp
 from typing import List, Optional
 
@@ -57,6 +58,9 @@ class ZodFramesDataset(Custom3DDataset):
         use_valid_flag (bool, optional): Whether to use `use_valid_flag` key
             in the info file as mask to filter gt_boxes and gt_names.
             Defaults to False.
+        single_cam_mode (bool, optional): Treat zod a single-image dataset. By
+            default zod operates like a multi-camera dataset that only has a
+            single camera. This affects how the image loading pipeline works.
     """
     CLASSES = EVALUATION_CLASSES
 
@@ -75,6 +79,7 @@ class ZodFramesDataset(Custom3DDataset):
         use_valid_flag=True,
         anonymization_mode=BLUR,
         use_png=False,
+        single_cam_mode=True,
     ):
         self.load_interval = load_interval
         self.use_valid_flag = use_valid_flag
@@ -91,6 +96,7 @@ class ZodFramesDataset(Custom3DDataset):
         self.anonymization_mode = anonymization_mode
         self.use_png = use_png
         self.eval_version = eval_version
+        self.single_cam_mode = single_cam_mode
         # from nuscenes.eval.detection.config import config_factory
 
         # self.eval_detection_configs = config_factory(self.eval_version)
@@ -186,31 +192,37 @@ class ZodFramesDataset(Custom3DDataset):
             pts_filename=info['lidar_path'],
             sweeps=info['sweeps'],
             timestamp=info['timestamp'] / 1e6,
+            img_prefix=None,
         )
 
         if self.modality['use_camera']:
-            image_paths = []
-            lidar2img_rts = []
-            for cam_type, cam_info in info['cams'].items():
-                image_paths.append(cam_info['data_path'])
+            cam_input = defaultdict(list)
+            # NOTE: we only have a single camera in zod for now
+            for _, cam_info in info['cams'].items():
+                cam_input['img_filename'].append(cam_info['data_path'])
                 # obtain lidar to image transformation matrix
                 lidar2cam_r = np.linalg.inv(cam_info['sensor2lidar_rotation'])
                 lidar2cam_t = cam_info[
                     'sensor2lidar_translation'] @ lidar2cam_r.T
                 lidar2cam_rt = np.eye(4)
-                lidar2cam_rt[:3, :3] = lidar2cam_r.T
-                lidar2cam_rt[3, :3] = -lidar2cam_t
-                intrinsic = cam_info['cam_intrinsic']
-                viewpad = np.eye(4)
-                viewpad[:intrinsic.shape[0], :intrinsic.shape[1]] = intrinsic
-                lidar2img_rt = viewpad @ lidar2cam_rt.T
-                lidar2img_rts.append(lidar2img_rt)
-
-            input_dict.update(
-                dict(
-                    img_filename=image_paths,
-                    lidar2img=lidar2img_rts,
-                ))
+                lidar2cam_rt[:3, :3] = lidar2cam_r
+                lidar2cam_rt[:3, 3] = -lidar2cam_t
+                cam_input['lidar2cam'].append(lidar2cam_rt)
+                cam_input['cam2img'].append(cam_info['cam_intrinsic'])
+                cam_input['distortion'].append(cam_info['cam_distortion'])
+                cam_input['undistortion'].append(cam_info['cam_undistortion'])
+                cam_input['proj_model'].append(cam_info['proj_model'])
+                # viewpad = np.eye(4)
+                # viewpad[:intrinsic.shape[0], :intrinsic.shape[1]] = intrinsic
+                # lidar2img_rt = viewpad @ lidar2cam_rt.T
+                # lidar2img_rts.append(lidar2img_rt)
+            if self.single_cam_mode:
+                for key, value in list(cam_input.items()):
+                    assert len(value) == 1
+                    cam_input[key] = value[0]
+                cam_input['img_info'] = dict(
+                    filename=cam_input['img_filename'])
+            input_dict.update(cam_input)
 
         if not self.test_mode:
             annos = self.get_ann_info(index)
