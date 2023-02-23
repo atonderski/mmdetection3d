@@ -106,17 +106,16 @@ class MMDet3DWandbHook(MMDetWandbHook):
     # 3D Visualizations #
 
     def _setup_lidar_loader(self, runner):
+        # Get lidar loading pipeline
+        from mmdet3d.datasets.pipelines.loading import (LoadPointsFromFile,
+                                                        ZodLoadPointsFromFile)
+        for t in self.val_dataset.pipeline.transforms:
+            if isinstance(t, (LoadPointsFromFile, ZodLoadPointsFromFile)):
+                self._lidar_loader = t
         if self._lidar_loader is None:
-            # Get lidar loading pipeline
-            from mmdet3d.datasets.pipelines.loading import (
-                LoadPointsFromFile, ZodLoadPointsFromFile)
-            for t in self.val_dataset.pipeline.transforms:
-                if isinstance(t, (LoadPointsFromFile, ZodLoadPointsFromFile)):
-                    self._lidar_loader = t
-            if self._lidar_loader is None and runner is not None:
-                runner.logger.warning(
-                    'LoadPointsFromFile is required to add points to 3d '
-                    'visualization. Only bounding boxes will be shown now.')
+            runner.logger.warning(
+                'LoadPointsFromFile is required to add points to 3d '
+                'visualization. Only bounding boxes will be shown now.')
         return self._lidar_loader
 
     def _add_3d_predictions(self, preds, idx):
@@ -224,7 +223,10 @@ class MMDet3DWandbHook(MMDetWandbHook):
             # Load the image
             if isinstance(img_loader, LoadImageFromFileMono3D):
                 image = img_loader(
-                    {'img_info': self.val_dataset.data_infos[idx]})['img']
+                    dict(
+                        img_info=self.val_dataset.data_infos[idx],
+                        img_prefix=self.val_dataset.img_prefix,
+                    ))['img']
             else:
                 image = img_loader(self.val_dataset.get_data_info(idx))['img']
                 if len(image.shape) > 3:

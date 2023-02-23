@@ -7,10 +7,10 @@ data = dict(
     train=dict(
         times=240,
         dataset=dict(
-            ann_file=f'{_mmdir}/zodsingle_infos_train_mono3d.coco.json',
+            ann_file=f'{_mmdir}/zod-single_infos_train_mono3d.coco.json',
             eval_version='kitti')),  # Train is a wrapped dataset
     val=dict(
-        ann_file=f'{_mmdir}/zodsingle_infos_val_mono3d.coco.json',
+        ann_file=f'{_mmdir}/zod-single_infos_val_mono3d.coco.json',
         eval_version='kitti'),
     test=dict(eval_version='kitti'),
 )

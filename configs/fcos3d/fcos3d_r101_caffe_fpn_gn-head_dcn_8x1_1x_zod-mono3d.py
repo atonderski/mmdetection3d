@@ -1,5 +1,5 @@
 _base_ = [
-    '../_base_/datasets/zodmono3d.py', '../_base_/models/fcos3d.py',
+    '../_base_/datasets/zod-frames-mono3d.py', '../_base_/models/fcos3d.py',
     '../_base_/schedules/mmdet_schedule_1x.py', '../_base_/default_runtime.py'
 ]
 class_names = [
@@ -120,5 +120,7 @@ log_config = dict(
             log_checkpoint_metadata=False,
             num_eval_images=10,
             bbox_score_thr=0.1,
+            visualize_img=True,
+            visualize_3d=True,
         )
     ])
