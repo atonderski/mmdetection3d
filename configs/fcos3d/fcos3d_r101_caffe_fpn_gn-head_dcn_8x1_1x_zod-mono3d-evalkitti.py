@@ -1,4 +1,4 @@
-_base_ = ['fcos3d_r101_caffe_fpn_gn-head_dcn_8x1_1x_zodmono3d.py']
+_base_ = ['fcos3d_r101_caffe_fpn_gn-head_dcn_8x1_1x_zod-mono3d.py']
 
 _mmdir = 'data/zod/mmdet3d'
 data = dict(

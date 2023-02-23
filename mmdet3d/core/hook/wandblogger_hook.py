@@ -130,6 +130,10 @@ class MMDet3DWandbHook(MMDetWandbHook):
                 points = points[np.random.choice(
                     len(points), self._max_points, replace=False)]
             content['points'] = points
+        else:
+            # Need to add dummy points for W&B to render properly
+            content['points'] = np.array([[-50, -50, -5], [50, 50, 5]],
+                                         dtype=np.float32)
         # Process detections and ground truths
         boxes_3d, labels, scores = preds
         pred_wandb_boxes = self._get_wandb_bboxes_3d(boxes_3d, labels, scores)
@@ -256,6 +260,7 @@ class MMDet3DWandbHook(MMDetWandbHook):
         boxes_3d, labels, scores = preds
         pred_boxes = self._get_wandb_bboxes_img(
             img_info, boxes_3d, labels, scores, log_gt=False)
+        # TODO: maybe stop logging predictions as an artifact
         self.eval_table.add_data(
             data_ref[0], data_ref[1],
             self.wandb.Image(
@@ -286,7 +291,7 @@ class MMDet3DWandbHook(MMDetWandbHook):
         Returns:
             Dictionary of bounding boxes to be logged.
         """
-        bboxes = _box3d_to_img(boxes_3d, img_info)
+        bboxes = _box3d_to_img(boxes_3d, img_info, scores)
         wandb_boxes = {}
         box_data = []
         for bbox, label in zip(bboxes, labels):
