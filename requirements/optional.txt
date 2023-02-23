@@ -1,4 +1,4 @@
 open3d
 spconv
 waymo-open-dataset-tf-2-1-0==1.2.0
-zod>=0.1.1
+zod>=0.1.3

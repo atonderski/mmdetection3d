@@ -14,7 +14,6 @@ from zod.eval.detection import evaluate_nuscenes_style as zod_eval
 from mmdet3d.core.bbox.structures.utils import points_cam2img
 from mmdet3d.core.evaluation.kitti_utils.eval import kitti_eval
 from mmdet3d.datasets.nuscenes_mono_dataset import NuScenesMonoDataset
-from mmdet3d.datasets.zod_frames import flatten_dict
 from ..core.bbox import CameraInstance3DBoxes
 from .builder import DATASETS
 
@@ -257,7 +256,7 @@ class ZodFramesMonoDataset(NuScenesMonoDataset):
             det_boxes.add_boxes(frame_id, self._det_to_zod(det, frame_id))
             gt_boxes.add_boxes(frame_id, self._gt_to_zod(idx, frame_id))
 
-        results_dict = flatten_dict(zod_eval(gt_boxes, det_boxes))
+        results_dict = zod_eval(gt_boxes, det_boxes)
         print_log(results_dict, logger=logger)
         return results_dict
 

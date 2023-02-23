@@ -1,4 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+import json
+
 import mmcv
 import numpy as np
 import torch
@@ -56,10 +58,8 @@ class MMDet3DWandbHook(MMDetWandbHook):
 
         # Set up the class set in W&B
         CLASSES = self.val_dataset.CLASSES
-        self.class_id_to_label = {
-            id + 1: name
-            for id, name in enumerate(CLASSES)
-        }
+        self.class_id_to_label = {id: name for id, name in enumerate(CLASSES)}
+        self.class_id_to_label[-1] = 'Ignore'
         self.class_set = self.wandb.Classes([{
             'id': id,
             'name': name
@@ -99,9 +99,10 @@ class MMDet3DWandbHook(MMDetWandbHook):
             if self.range_3d is not None:
                 table_idxs = self.data_table_3d_ref.get_index()
                 assert len(table_idxs) == len(self.eval_idxs)
-                if 'pts_bbox' in results[eval_image_index]:
-                    results = [res['pts_bbox'] for res in results]
-                preds = self._get_pred_boxes(results)
+                results_3d = results[eval_image_index]
+                if 'pts_bbox' in results_3d:
+                    results_3d = results_3d['pts_bbox']
+                preds = self._get_pred_boxes(results_3d)
                 data_ref = self.data_table_3d_ref.data[ndx]
                 self._add_3d_predictions(preds, data_ref)
 
@@ -187,23 +188,27 @@ class MMDet3DWandbHook(MMDetWandbHook):
                     'boxes': boxes,
                 }),
             )
-            self.wandb.log({
-                'gt_3d':
-                self.wandb.Object3D({
-                    'type': 'lidar/beta',
-                    'points': points,
-                    'boxes': boxes,
-                })
-            })
+            # self.wandb.log({
+            #     'gt_3d':
+            #     self.wandb.Object3D({
+            #         'type': 'lidar/beta',
+            #         'points': points,
+            #         'boxes': boxes,
+            #     })
+            # })
 
     def _add_3d_predictions(self, preds, data_ref):
         boxes_3d, labels, scores = preds
+        assert scores is not None
         pred_wandb_boxes = self._get_wandb_bboxes_3d(boxes_3d, labels, scores)
-        gt_wandb_boxes = data_ref[1]['boxes']
+        with open(data_ref[1]._path) as f:
+            data = json.load(f)
+        points = np.array(data['points'], dtype=np.float32)
+        gt_wandb_boxes = data['boxes']
         wandb_boxes = np.array(pred_wandb_boxes.tolist() + gt_wandb_boxes)
         pred_obj = self.wandb.Object3D({
             'type': 'lidar/beta',
-            'points': data_ref[1]['points'],
+            'points': points,
             'boxes': wandb_boxes
         })
         self.eval_table_3d.add_data(data_ref[0], data_ref[1], pred_obj)
@@ -224,8 +229,7 @@ class MMDet3DWandbHook(MMDetWandbHook):
         for i, (label, corners) in enumerate(zip(labels, boxes_3d.corners)):
             if not isinstance(label, int):
                 label = int(label)
-            label = label + 1
-            # class_name = str(self.class_id_to_label[label])
+            class_name = str(self.class_id_to_label.get(label, str(label)))
             # if scores is not None:
             #     confidence = scores[i]
             #     # box_caption = f'{class_name} {confidence:.2f}'
@@ -234,13 +238,14 @@ class MMDet3DWandbHook(MMDetWandbHook):
             if scores is not None:
                 box_data.append({
                     'corners': corners.tolist(),
-                    'label': 'prediction',
-                    'color': (255 * scores[i], 0, 0),  # red for pred
+                    'label': f'pred-{class_name}',
+                    'color': (255, 0, 0),  # red for pred
+                    # 'color': (255 * float(scores[i]), 0, 0),  # red for pred
                 })
             else:
                 box_data.append({
                     'corners': corners.tolist(),
-                    'label': '',
+                    'label': f'gt-{class_name}',
                     'color': (0, 255, 0),  # green for gt
                 })
         return np.array(box_data)
@@ -331,7 +336,6 @@ class MMDet3DWandbHook(MMDetWandbHook):
         for bbox, label in zip(bboxes, labels):
             if not isinstance(label, int):
                 label = int(label)
-            label = label + 1
 
             if len(bbox) == 5:
                 confidence = float(bbox[4])
