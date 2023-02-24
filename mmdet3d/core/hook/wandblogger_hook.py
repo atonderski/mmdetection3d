@@ -6,7 +6,6 @@ import numpy as np
 import torch
 from mmcv.runner import HOOKS
 
-from mmdet3d.core.bbox.structures.box_3d_mode import Box3DMode
 from mmdet3d.core.bbox.structures.utils import points_cam2img
 from mmdet.core import MMDetWandbHook
 
@@ -333,14 +332,24 @@ class MMDet3DWandbHook(MMDetWandbHook):
 
 def _box3d_to_img(boxes_3d, img_info, scores=None):
     # Move box to camera frame
+    corners = boxes_3d.corners
+    proj_mat = img_info['cam2img']
     from mmdet3d.core import LiDARInstance3DBoxes
     if isinstance(boxes_3d, LiDARInstance3DBoxes):
-        boxes_3d = boxes_3d.convert_to(Box3DMode.CAM, img_info['lidar2cam'])
+        if 'lidar2img' in img_info:
+            # Use direct lidar to image projection if available
+            proj_mat = img_info['lidar2img']
+        else:
+            # Otherwise we convert to camera frame first
+            lidar2cam = torch.tensor(
+                img_info['lidar2cam'], dtype=corners.dtype)
+            corners = torch.cat(
+                [corners, torch.ones_like(corners[..., 0:1])], dim=-1)
+            corners = (corners @ lidar2cam.t())[..., :3]
     # Project bbox to 2d
-    box_corners_in_image = points_cam2img(
-        boxes_3d.corners, proj_mat=img_info['cam2img'], meta=img_info)
-    minxy = torch.min(box_corners_in_image, dim=-2)[0]
-    maxxy = torch.max(box_corners_in_image, dim=-2)[0]
+    corners_in_image = points_cam2img(corners, proj_mat, meta=img_info)
+    minxy = torch.min(corners_in_image, dim=-2)[0]
+    maxxy = torch.max(corners_in_image, dim=-2)[0]
     if scores is None:
         bboxes = torch.cat([minxy, maxxy], dim=-1)
     else:
