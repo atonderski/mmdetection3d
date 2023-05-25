@@ -1,13 +1,13 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import os
 from os import path as osp
-from typing import List, Union
+from typing import Set, Union
 
 import mmcv
 import numpy as np
 from pyquaternion import Quaternion
 from zod import ZodFrames
-from zod.anno.object import OBJECT_CLASSES as ALL_CLASSES
+from zod.anno.object import OBJECT_SUBCLASSES as ALL_CLASSES
 from zod.constants import AnnotationProject, Anonymization, Camera, Lidar
 from zod.data_classes.box import Box3D
 from zod.data_classes.calibration import CameraCalibration, LidarCalibration
@@ -39,8 +39,8 @@ def create_zod_infos(root_path,
     if version == 'single':
         print('Will only use a single (the second) frame from the mini set.')
         zod = ZodFrames(root_path, 'mini')
-        train_scenes = zod.get_split('val')[1:2]
-        val_scenes = zod.get_split('val')[1:2]
+        train_scenes = sorted(zod.get_split('val'))[1:2]
+        val_scenes = sorted(zod.get_split('val'))[1:2]
     else:
         zod = ZodFrames(root_path, version)
         train_scenes = zod.get_split('train')
@@ -59,7 +59,7 @@ def create_zod_infos(root_path,
     mmcv.dump(data, info_val_path)
 
 
-def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10):
+def _fill_infos(zod: ZodFrames, frames: Set[str], max_sweeps=10):
     """Generate the train/val infos from the raw data.
 
     Args:
@@ -146,7 +146,7 @@ def _fill_infos(zod: ZodFrames, frames: List[str], max_sweeps=10):
         is_ignore = np.array([a.should_ignore_object() for a in annos],
                              dtype=bool)
 
-        names = [b.name for b in annos]
+        names = [b.subclass for b in annos]
         names = np.array(names)
 
         assert len(gt_boxes) == len(annos), f'{len(gt_boxes)}, {len(annos)}'

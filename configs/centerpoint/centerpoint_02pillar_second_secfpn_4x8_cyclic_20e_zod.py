@@ -7,17 +7,10 @@ _base_ = [
 
 # If point cloud range is changed, the models should also change their point
 # cloud range accordingly
-point_cloud_range = [-51.2, 0, -5.0, 51.2, 102.4, 3.0]
+point_cloud_range = [-76.8, 0, -5.0, 76.8, 256.0, 3.0]
+
 # For ZOD we usually do 3-class detection
 class_names = ['Vehicle', 'VulnerableVehicle', 'Pedestrian']
-
-model = dict(
-    pts_voxel_layer=dict(point_cloud_range=point_cloud_range),
-    pts_voxel_encoder=dict(point_cloud_range=point_cloud_range),
-    pts_bbox_head=dict(bbox_coder=dict(pc_range=point_cloud_range[:2])),
-    # model training and testing settings
-    train_cfg=dict(pts=dict(point_cloud_range=point_cloud_range)),
-    test_cfg=dict(pts=dict(pc_range=point_cloud_range[:2])))
 
 dataset_type = 'ZodFramesDataset'
 data_root = 'data/zod/'
@@ -67,25 +60,18 @@ train_pipeline = [
         load_dim=5,
         use_dim=5,
         file_client_args=file_client_args),
-    # dict(
-    #     type='LoadPointsFromMultiSweeps',
-    #     sweeps_num=9,
-    #     use_dim=[0, 1, 2, 3, 4],
-    #     file_client_args=file_client_args,
-    #     pad_empty_sweeps=True,
-    #     remove_close=True),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
     # dict(type='ObjectSample', db_sampler=db_sampler),
-    # dict(
-    #     type='GlobalRotScaleTrans',
-    #     rot_range=[-0.3925, 0.3925],
-    #     scale_ratio_range=[0.95, 1.05],
-    #     translation_std=[0, 0, 0]),
-    # dict(
-    #     type='RandomFlip3D',
-    #     sync_2d=False,
-    #     flip_ratio_bev_horizontal=0.5,
-    #     flip_ratio_bev_vertical=0.5),
+    dict(
+        type='GlobalRotScaleTrans',
+        rot_range=[-0.3925, 0.3925],
+        scale_ratio_range=[0.95, 1.05],
+        translation_std=[0, 0, 0]),
+    dict(
+        type='RandomFlip3D',
+        sync_2d=False,
+        flip_ratio_bev_horizontal=0.5,
+        flip_ratio_bev_vertical=0.5),
     dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectNameFilter', classes=class_names),
@@ -100,13 +86,6 @@ test_pipeline = [
         load_dim=5,
         use_dim=5,
         file_client_args=file_client_args),
-    # dict(
-    #     type='ZodLoadPointsFromMultiSweeps',
-    #     sweeps_num=9,
-    #     use_dim=[0, 1, 2, 3, 4],
-    #     file_client_args=file_client_args,
-    #     pad_empty_sweeps=True,
-    #     remove_close=True),
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug3D',
@@ -114,12 +93,6 @@ test_pipeline = [
         pts_scale_ratio=1,
         flip=False,
         transforms=[
-            # dict(
-            #     type='GlobalRotScaleTrans',
-            #     rot_range=[0, 0],
-            #     scale_ratio_range=[1., 1.],
-            #     translation_std=[0, 0, 0]),
-            # dict(type='RandomFlip3D'),
             dict(
                 type='DefaultFormatBundle3D',
                 class_names=class_names,
@@ -136,13 +109,6 @@ eval_pipeline = [
         load_dim=5,
         use_dim=5,
         file_client_args=file_client_args),
-    # dict(
-    #     type='ZodLoadPointsFromMultiSweeps',
-    #     sweeps_num=9,
-    #     use_dim=[0, 1, 2, 3, 4],
-    #     file_client_args=file_client_args,
-    #     pad_empty_sweeps=True,
-    #     remove_close=True),
     dict(type='LoadImageFromFile'),
     dict(
         type='DefaultFormatBundle3D',
@@ -151,25 +117,23 @@ eval_pipeline = [
     dict(type='Collect3D', keys=['points'])
 ]
 
-# train_load_interval = 1000
-
 data = dict(
-    samples_per_gpu=4,
-    workers_per_gpu=4,
+    samples_per_gpu=12,
+    workers_per_gpu=16,
     train=dict(
-        times=400,
+        times=1,
         dataset=dict(
-            ann_file=data_root + 'mmdet3d/zod-single_infos_train.pkl',
+            ann_file=data_root + 'mmdet3d/zod_infos_train.pkl',
             pipeline=train_pipeline,
             classes=class_names)),
     val=dict(
         pipeline=test_pipeline,
         classes=class_names,
-        ann_file=data_root + 'mmdet3d/zod-single_infos_train.pkl'),
+        ann_file=data_root + 'mmdet3d/zod_infos_train.pkl'),
     test=dict(
         pipeline=test_pipeline,
         classes=class_names,
-        ann_file=data_root + 'mmdet3d/zod-single_infos_train.pkl'))
+        ann_file=data_root + 'mmdet3d/zod_infos_train.pkl'))
 
 log_config = dict(
     interval=50,
@@ -191,4 +155,4 @@ log_config = dict(
         )
     ])
 
-evaluation = dict(interval=10, pipeline=eval_pipeline)
+evaluation = dict(interval=1, pipeline=eval_pipeline)

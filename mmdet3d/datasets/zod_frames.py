@@ -1,4 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+import tempfile
 from collections import defaultdict
 from os import path as osp
 from typing import List, Optional
@@ -38,8 +39,6 @@ class ZodFramesDataset(Custom3DDataset):
             Defaults to None.
         load_interval (int, optional): Interval of loading the dataset. It is
             used to uniformly sample the dataset. Defaults to 1.
-        with_velocity (bool, optional): Whether include velocity prediction
-            into the experiments. Defaults to True.
         modality (dict, optional): Modality to specify the sensor data used
             as input. Defaults to None.
         box_type_3d (str, optional): Type of 3D box of this dataset.
@@ -80,6 +79,7 @@ class ZodFramesDataset(Custom3DDataset):
         anonymization_mode=BLUR,
         use_png=False,
         single_cam_mode=True,
+        merge_subclasses=True,
     ):
         self.load_interval = load_interval
         self.use_valid_flag = use_valid_flag
@@ -97,6 +97,7 @@ class ZodFramesDataset(Custom3DDataset):
         self.use_png = use_png
         self.eval_version = eval_version
         self.single_cam_mode = single_cam_mode
+        self.merge_subclasses = merge_subclasses
         # from nuscenes.eval.detection.config import config_factory
 
         # self.eval_detection_configs = config_factory(self.eval_version)
@@ -253,6 +254,8 @@ class ZodFramesDataset(Custom3DDataset):
         gt_names_3d = info['gt_names'][mask]
         gt_labels_3d = []
         for cat in gt_names_3d:
+            if self.merge_subclasses:
+                cat = cat.split('_')[0]
             if cat in self.CLASSES:
                 gt_labels_3d.append(self.CLASSES.index(cat))
             else:
@@ -271,6 +274,98 @@ class ZodFramesDataset(Custom3DDataset):
             gt_labels_3d=gt_labels_3d,
             gt_names=gt_names_3d)
         return anns_results
+
+    def _format_bbox(self, results, jsonfile_prefix=None):
+        """Convert the results to the standard format.
+
+        Args:
+            results (list[dict]): Testing results of the dataset.
+            jsonfile_prefix (str): The prefix of the output jsonfile.
+                You can specify the output directory/filename by
+                modifying the jsonfile_prefix. Default: None.
+
+        Returns:
+            str: Path of the output json file.
+        """
+        zod_annos = {}
+        print('Start to convert detection format...')
+        for sample_id, det in enumerate(mmcv.track_iter_progress(results)):
+            annos = []
+            sample_token = self.data_infos[sample_id]['frame_id']
+            boxes = self._det_to_zod(det, sample_token)
+
+            for i, box in enumerate(boxes):
+                name = box.detection_name
+                attr = ''
+
+                zod_anno = dict(
+                    sample_token=sample_token,
+                    translation=list(box.translation),
+                    size=list(box.size),
+                    rotation=list(box.rotation),
+                    velocity=[0, 0, 0],
+                    detection_name=name,
+                    detection_score=box.detection_score,
+                    attribute_name=attr)
+                annos.append(zod_anno)
+            zod_annos[sample_token] = annos
+        nusc_submissions = {
+            'meta': self.modality,
+            'results': zod_annos,
+        }
+
+        mmcv.mkdir_or_exist(jsonfile_prefix)
+        res_path = osp.join(jsonfile_prefix, 'results_zod.json')
+        print('Results writes to', res_path)
+        mmcv.dump(nusc_submissions, res_path)
+        return res_path
+
+    def format_results(self, results, jsonfile_prefix=None):
+        """Format the results to json (standard format for COCO evaluation).
+
+        TODO: check if this makes sense
+
+        Args:
+            results (list[dict]): Testing results of the dataset.
+            jsonfile_prefix (str): The prefix of json files. It includes
+                the file path and the prefix of filename, e.g., "a/b/prefix".
+                If not specified, a temp file will be created. Default: None.
+
+        Returns:
+            tuple: Returns (result_files, tmp_dir), where `result_files` is a
+                dict containing the json filepaths, `tmp_dir` is the temporal
+                directory created for saving json files when
+                `jsonfile_prefix` is not specified.
+        """
+        assert isinstance(results, list), 'results must be a list'
+        assert len(results) == len(self), (
+            'The length of results is not equal to the dataset len: {} != {}'.
+            format(len(results), len(self)))
+
+        if jsonfile_prefix is None:
+            tmp_dir = tempfile.TemporaryDirectory()
+            jsonfile_prefix = osp.join(tmp_dir.name, 'results')
+        else:
+            tmp_dir = None
+
+        # currently the output prediction results could be in two formats
+        # 1. list of dict('boxes_3d': ..., 'scores_3d': ..., 'labels_3d': ...)
+        # 2. list of dict('pts_bbox' or 'img_bbox':
+        #     dict('boxes_3d': ..., 'scores_3d': ..., 'labels_3d': ...))
+        # this is a workaround to enable evaluation of both formats on nuScenes
+        # refer to https://github.com/open-mmlab/mmdetection3d/issues/449
+        if not ('pts_bbox' in results[0] or 'img_bbox' in results[0]):
+            result_files = self._format_bbox(results, jsonfile_prefix)
+        else:
+            # should take the inner dict out of 'pts_bbox' or 'img_bbox' dict
+            result_files = dict()
+            for name in results[0]:
+                print(f'\nFormating bboxes of {name}')
+                results_ = [out[name] for out in results]
+                tmp_file_ = osp.join(jsonfile_prefix, name)
+                result_files.update(
+                    {name: self._format_bbox(results_, tmp_file_)})
+        return result_files, tmp_dir
 
     def evaluate(
         self,
@@ -321,7 +416,10 @@ class ZodFramesDataset(Custom3DDataset):
             det_boxes.add_boxes(frame_id, self._det_to_zod(det, frame_id))
             gt_boxes.add_boxes(frame_id, self._gt_to_zod(idx, frame_id))
 
-        results_dict = zod_eval(gt_boxes, det_boxes)
+        # ZOD wants to evaluate in ego frame, but we are in lidar
+        # TODO: convert to ego frame
+        results_dict = zod_eval(
+            gt_boxes, det_boxes, verify_coordinate_system=False)
         print_log(results_dict, logger=logger)
 
         if show or out_dir:
@@ -335,14 +433,18 @@ class ZodFramesDataset(Custom3DDataset):
                 det['labels_3d'].numpy(),
                 det['scores_3d'].numpy(),
         ):
-            dets.append(self._obj_to_zod(frame_id, box3d, label, score))
+            zod_obj = self._obj_to_zod(frame_id, box3d, label, score)
+            if zod_obj is not None:
+                dets.append(zod_obj)
         return dets
 
     def _gt_to_zod(self, idx: int, frame_id: str) -> List[DetectionBox]:
         anno: dict = self.get_ann_info(idx)
         gts = []
         for box3d, label in zip(anno['gt_bboxes_3d'], anno['gt_labels_3d']):
-            gts.append(self._obj_to_zod(frame_id, box3d, label))
+            zod_obj = self._obj_to_zod(frame_id, box3d, label)
+            if zod_obj is not None:
+                gts.append(zod_obj)
         return gts
 
     def _obj_to_zod(self,
@@ -363,7 +465,6 @@ class ZodFramesDataset(Custom3DDataset):
             translation=tuple(box3d[:3]),
             size=tuple(box3d[3:6]),
             rotation=tuple(rot.elements),
-            ego_translation=tuple(box3d[:3]),
             detection_name=class_name,
             detection_score=float(score),
         )
