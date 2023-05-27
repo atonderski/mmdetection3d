@@ -11,6 +11,7 @@ rm -f /proj/nlp4adas/users/$USER/mmdetection3d/data/zod
 
 singularity exec --nv --bind /proj/nlp4adas/users/$USER/mmdetection3d:/mmdetection3d \
   --bind /proj/adas-data/data/zod:/mmdetection3d/data/zod \
+  --bind /tmp:/home/$USER/.local/lib/python3.8/site-packages \
   --pwd /mmdetection3d/ \
   --env PYTHONPATH=/mmdetection3d/ \
   /proj/nlp4adas/containers/mmdet3d.sif \
