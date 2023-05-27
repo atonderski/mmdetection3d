@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 #SBATCH --nodes 1
-#SBATCH --gpus 4
+#SBATCH --gpus 8
 #SBATCH --time 1-00:00:00
 #SBATCH --output /proj/nlp4adas/users/%u/logs/%j.out
 #SBATCH -A berzelius-2022-232
@@ -14,6 +14,6 @@ singularity exec --nv --bind /proj/nlp4adas/users/$USER/mmdetection3d:/mmdetecti
   --pwd /mmdetection3d/ \
   --env PYTHONPATH=/mmdetection3d/ \
   /proj/nlp4adas/containers/mmdet3d.sif \
-  bash tools/dist_train.sh $1 4 ${@:2}
+  bash tools/dist_train.sh $1 8 ${@:2}
 #
 #EOF

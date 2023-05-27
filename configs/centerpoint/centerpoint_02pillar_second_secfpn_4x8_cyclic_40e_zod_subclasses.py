@@ -120,6 +120,7 @@ data = dict(
     val=dict(
         pipeline=test_pipeline, classes=class_names, merge_subclasses=False),
     test=dict(
-        pipeline=test_pipeline, classes=class_names, merge_subclasses=False))
+        pipeline=test_pipeline, classes=class_names, merge_subclasses=False),
+)
 
 evaluation = dict(pipeline=eval_pipeline)

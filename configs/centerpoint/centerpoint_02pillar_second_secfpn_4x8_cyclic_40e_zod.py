@@ -1,7 +1,7 @@
 _base_ = [
     '../_base_/datasets/zod-frames-3d.py',
     '../_base_/models/centerpoint_02pillar_second_secfpn_zod.py',
-    '../_base_/schedules/cyclic_20e.py',
+    '../_base_/schedules/cyclic_40e.py',
     '../_base_/default_runtime.py',
 ]
 
@@ -118,7 +118,7 @@ eval_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=12,
+    samples_per_gpu=10,
     workers_per_gpu=16,
     train=dict(
         times=1,
@@ -155,4 +155,4 @@ log_config = dict(
         )
     ])
 
-evaluation = dict(interval=1, pipeline=eval_pipeline)
+evaluation = dict(interval=20, pipeline=eval_pipeline)
