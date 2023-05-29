@@ -129,11 +129,11 @@ data = dict(
     val=dict(
         pipeline=test_pipeline,
         classes=class_names,
-        ann_file=data_root + 'mmdet3d/zod_infos_train.pkl'),
+        ann_file=data_root + 'mmdet3d/zod_infos_val.pkl'),
     test=dict(
         pipeline=test_pipeline,
         classes=class_names,
-        ann_file=data_root + 'mmdet3d/zod_infos_train.pkl'))
+        ann_file=data_root + 'mmdet3d/zod_infos_val.pkl'))
 
 log_config = dict(
     interval=50,
