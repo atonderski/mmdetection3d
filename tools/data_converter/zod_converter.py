@@ -143,8 +143,7 @@ def _fill_infos(zod: ZodFrames, frames: Set[str], max_sweeps=10):
         # ).reshape(-1)
         valid_flag = np.ones(gt_boxes.shape[0], dtype=bool)
         has_3d = np.array([a.box3d is not None for a in annos], dtype=bool)
-        is_ignore = np.array([a.should_ignore_object() for a in annos],
-                             dtype=bool)
+        is_ignore = np.array([a.unclear for a in annos], dtype=bool)
 
         names = [b.subclass for b in annos]
         names = np.array(names)
