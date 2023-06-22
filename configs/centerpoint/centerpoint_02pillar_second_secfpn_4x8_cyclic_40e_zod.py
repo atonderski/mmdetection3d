@@ -155,4 +155,4 @@ log_config = dict(
         )
     ])
 
-evaluation = dict(interval=20, pipeline=eval_pipeline)
+evaluation = dict(interval=10, pipeline=eval_pipeline)
