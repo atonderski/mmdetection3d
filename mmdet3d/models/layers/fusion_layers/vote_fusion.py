@@ -60,7 +60,8 @@ class VoteFusion(nn.Module):
 
             # project points from depth to image
             depth2img = xyz_depth.new_tensor(img_meta['depth2img'])
-            uvz_origin = points_cam2img(xyz_depth, depth2img, True)
+            uvz_origin = points_cam2img(
+                xyz_depth, depth2img, True, meta=img_meta)
             z_cam = uvz_origin[..., 2]
             uv_origin = (uvz_origin[..., :2] - 1).round()
 

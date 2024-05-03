@@ -616,6 +616,8 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
         """
         view = np.array(img_meta['cam2img'])
         scale_factor = img_meta['scale_factor']
+        if not isinstance(scale_factor, float):
+            scale_factor = scale_factor[:2]
         cfg = self.test_cfg if cfg is None else cfg
         assert len(cls_score_list) == len(bbox_pred_list) == len(mlvl_points)
         mlvl_centers_2d = []
@@ -658,7 +660,7 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             if rescale:
                 bbox_pred[:, :2] /= bbox_pred[:, :2].new_tensor(scale_factor)
             pred_center2d = bbox_pred[:, :3].clone()
-            bbox_pred[:, :3] = points_img2cam(bbox_pred[:, :3], view)
+            bbox_pred[:, :3] = points_img2cam(bbox_pred[:, :3], view, img_meta)
             mlvl_centers_2d.append(pred_center2d)
             mlvl_bboxes.append(bbox_pred)
             mlvl_scores.append(scores)

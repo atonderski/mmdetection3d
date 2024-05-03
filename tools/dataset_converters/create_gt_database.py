@@ -210,13 +210,40 @@ def create_groundtruth_database(dataset_class_name,
                     coord_type='LIDAR',
                     load_dim=6,
                     use_dim=6,
-                    backend_args=backend_args),
+                    backend_args=backend_args,
+                ),
                 dict(
                     type='LoadAnnotations3D',
                     with_bbox_3d=True,
                     with_label_3d=True,
-                    backend_args=backend_args)
-            ])
+                    backend_args=backend_args,
+                ),
+            ],
+        )
+    elif dataset_class_name == 'ZodFramesDataset':
+        dataset_cfg.update(
+            use_valid_flag=True,
+            pipeline=[
+                dict(
+                    type='ZodLoadPointsFromFile',
+                    coord_type='LIDAR',
+                    load_dim=5,
+                    use_dim=5,
+                ),
+                dict(
+                    type='ZodLoadPointsFromMultiSweeps',
+                    sweeps_num=0,
+                    use_dim=[0, 1, 2, 3, 4],
+                    pad_empty_sweeps=True,
+                    remove_close=True,
+                ),
+                dict(
+                    type='LoadAnnotations3D',
+                    with_bbox_3d=True,
+                    with_label_3d=True,
+                ),
+            ],
+        )
 
     dataset = DATASETS.build(dataset_cfg)
 
@@ -581,14 +608,40 @@ class GTDatabaseCreater:
                         coord_type='LIDAR',
                         load_dim=6,
                         use_dim=6,
-                        backend_args=backend_args),
+                        backend_args=backend_args,
+                    ),
                     dict(
                         type='LoadAnnotations3D',
                         with_bbox_3d=True,
                         with_label_3d=True,
-                        backend_args=backend_args)
-                ])
-
+                        backend_args=backend_args,
+                    ),
+                ],
+            )
+        elif self.dataset_class_name == 'ZodFramesDataset':
+            dataset_cfg.update(
+                use_valid_flag=True,
+                pipeline=[
+                    dict(
+                        type='ZodLoadPointsFromFile',
+                        coord_type='LIDAR',
+                        load_dim=5,
+                        use_dim=5,
+                    ),
+                    dict(
+                        type='ZodLoadPointsFromMultiSweeps',
+                        sweeps_num=0,
+                        use_dim=[0, 1, 2, 3, 4],
+                        pad_empty_sweeps=True,
+                        remove_close=True,
+                    ),
+                    dict(
+                        type='LoadAnnotations3D',
+                        with_bbox_3d=True,
+                        with_label_3d=True,
+                    ),
+                ],
+            )
         self.dataset = DATASETS.build(dataset_cfg)
         self.pipeline = self.dataset.pipeline
         if self.database_save_path is None:

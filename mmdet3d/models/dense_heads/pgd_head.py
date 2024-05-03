@@ -400,11 +400,13 @@ class PGDHead(FCOSMono3DHead):
             centers2d_preds = pos_strided_bbox_preds.clone()[mask, :2]
             centers2d_targets = pos_bbox_targets_3d.clone()[mask, :2]
             centers3d_targets = points_img2cam(pos_bbox_targets_3d[mask, :3],
-                                               views[idx])
+                                               views[idx],
+                                               batch_img_metas[idx])
 
             # use predicted depth to re-project the 2.5D centers
             pos_strided_bbox_preds[mask, :3] = points_img2cam(
-                pos_strided_bbox_preds[mask, :3], views[idx])
+                pos_strided_bbox_preds[mask, :3], views[idx],
+                batch_img_metas[idx])
             pos_bbox_targets_3d[mask, :3] = centers3d_targets
 
             # depth fixed when computing re-project 3D bboxes
@@ -426,13 +428,15 @@ class PGDHead(FCOSMono3DHead):
                 pos_strided_bbox_preds[mask],
                 box_dim=self.bbox_coder.bbox_code_size,
                 origin=(0.5, 0.5, 0.5)).corners
-            box_corners_in_image[mask] = points_cam2img(corners, cam2img)
+            box_corners_in_image[mask] = points_cam2img(
+                corners, cam2img, meta=batch_img_metas[idx])
 
             corners_gt = batch_img_metas[0]['box_type_3d'](
                 pos_bbox_targets_3d[mask, :self.bbox_code_size],
                 box_dim=self.bbox_coder.bbox_code_size,
                 origin=(0.5, 0.5, 0.5)).corners
-            box_corners_in_image_gt[mask] = points_cam2img(corners_gt, cam2img)
+            box_corners_in_image_gt[mask] = points_cam2img(
+                corners_gt, cam2img, meta=batch_img_metas[idx])
 
         minxy = torch.min(box_corners_in_image, dim=1)[0]
         maxxy = torch.max(box_corners_in_image, dim=1)[0]
@@ -1042,7 +1046,8 @@ class PGDHead(FCOSMono3DHead):
                 bbox_pred3d[:, 2] = sig_alpha * bbox_pred3d[:, 2] + \
                     (1 - sig_alpha) * prob_depth_pred
             pred_center2d = bbox_pred3d[:, :3].clone()
-            bbox_pred3d[:, :3] = points_img2cam(bbox_pred3d[:, :3], view)
+            bbox_pred3d[:, :3] = points_img2cam(bbox_pred3d[:, :3], view,
+                                                img_meta)
             mlvl_centers2d.append(pred_center2d)
             mlvl_bboxes.append(bbox_pred3d)
             mlvl_scores.append(scores)

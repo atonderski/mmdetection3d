@@ -1,5 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import argparse
+import os
 from os import path as osp
 
 from mmengine import print_log
@@ -9,6 +10,7 @@ from tools.dataset_converters import kitti_converter as kitti
 from tools.dataset_converters import lyft_converter as lyft_converter
 from tools.dataset_converters import nuscenes_converter as nuscenes_converter
 from tools.dataset_converters import semantickitti_converter
+from tools.dataset_converters import zod_converter as zod_converter
 from tools.dataset_converters.create_gt_database import (
     GTDatabaseCreater, create_groundtruth_database)
 from tools.dataset_converters.update_infos_to_v2 import update_pkl_infos
@@ -249,9 +251,56 @@ def waymo_data_prep(root_path,
         f'{info_prefix}_infos_train.pkl',
         relative_path=False,
         with_mask=False,
-        num_worker=workers).create()
+        num_worker=workers,
+    ).create()
 
     print_log('Successfully preparing Waymo Open Dataset')
+
+
+def zod_data_prep(root_path,
+                  info_prefix,
+                  version,
+                  out_dir,
+                  workers,
+                  max_sweeps=10):
+    """Prepare data related to Zenseact Open Dataset (ZOD).
+
+    Related data consists of '.pkl' files recording basic infos,
+    2D annotations and groundtruth database.
+
+    Args:
+        root_path (str): Path of dataset root.
+        info_prefix (str): The prefix of info filenames.
+        version (str): Dataset version.
+        out_dir (str): Output directory of the groundtruth database info.
+        max_sweeps (int, optional): Number of input consecutive frames.
+            Default: 10
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    zod_converter.create_zod_infos(
+        root_path,
+        out_dir,
+        info_prefix,
+        version=version,
+        max_sweeps=max_sweeps)
+    info_train_path = osp.join(out_dir, f'{info_prefix}_infos_train.pkl')
+    info_val_path = osp.join(out_dir, f'{info_prefix}_infos_val.pkl')
+    zod_converter.export_2d_annotation(
+        root_path, info_train_path, version=version)
+    zod_converter.export_2d_annotation(
+        root_path, info_val_path, version=version)
+    GTDatabaseCreater(
+        'ZodFramesDataset',
+        root_path,
+        info_prefix,
+        f'{out_dir}/{info_prefix}_infos_train.pkl',
+        num_worker=workers,
+        database_save_path=osp.join(out_dir, f'{info_prefix}_gt_database'),
+        db_info_save_path=osp.join(out_dir,
+                                   f'{info_prefix}_db_infos_train.pkl'),
+    ).create()
+
+    print_log('Successfully preparing Zenseact Open Dataset')
 
 
 def semantickitti_data_prep(info_prefix, out_dir):
@@ -416,5 +465,14 @@ if __name__ == '__main__':
     elif args.dataset == 'semantickitti':
         semantickitti_data_prep(
             info_prefix=args.extra_tag, out_dir=args.out_dir)
+    elif args.dataset == 'zod':
+        zod_data_prep(
+            root_path=args.root_path,
+            info_prefix=args.extra_tag,
+            version=args.version,
+            out_dir=args.out_dir,
+            workers=args.workers,
+            max_sweeps=args.max_sweeps,
+        )
     else:
         raise NotImplementedError(f'Don\'t support {args.dataset} dataset.')
