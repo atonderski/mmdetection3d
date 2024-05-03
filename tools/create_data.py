@@ -251,8 +251,7 @@ def waymo_data_prep(root_path,
         f'{info_prefix}_infos_train.pkl',
         relative_path=False,
         with_mask=False,
-        num_worker=workers,
-    ).create()
+        num_worker=workers).create()
 
     print_log('Successfully preparing Waymo Open Dataset')
 

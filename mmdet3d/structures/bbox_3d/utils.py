@@ -195,7 +195,7 @@ def points_cam2img(
             coordinates.
         with_depth (bool): Whether to keep depth in the output.
             Defaults to False.
-        meta (dict | None): this can contain information about alternative
+        meta (dict | None): This can contain information about alternative
             projection models and extra parameters.
 
     Returns:
@@ -205,13 +205,13 @@ def points_cam2img(
     points_shape = list(points_3d.shape)
     points_shape[-1] = 1
 
-    assert len(proj_mat.shape) == 2, (
-        'The dimension of the projection matrix should be 2 '
-        f'instead of {len(proj_mat.shape)}.')
+    assert len(proj_mat.shape) == 2, \
+        'The dimension of the projection matrix should be 2 ' \
+        f'instead of {len(proj_mat.shape)}.'
     d1, d2 = proj_mat.shape[:2]
-    assert (d1 == 3 and d2 == 3) or (d1 == 3 and d2 == 4) or (
-        d1 == 4 and d2 == 4), ('The shape of the projection matrix '
-                               f'({d1}*{d2}) is not supported.')
+    assert (d1 == 3 and d2 == 3) or (d1 == 3 and d2 == 4) or \
+        d1 == 4 and d2 == 4, ('The shape of the projection matrix '
+                              f'({d1}*{d2}) is not supported.')
     if d1 == 3:
         proj_mat_expanded = torch.eye(
             4, device=proj_mat.device, dtype=proj_mat.dtype)
@@ -287,7 +287,7 @@ def points_img2cam(
             [N, 3], 3 corresponds with x, y in the image and depth.
         cam2img (Tensor or np.ndarray): Camera intrinsic matrix. The shape can
             be [3, 3], [3, 4] or [4, 4].
-        meta (dict | None): this can contain information about alternative
+        meta (dict | None): This can contain information about alternative
             projection models and extra parameters.
 
     Returns:
